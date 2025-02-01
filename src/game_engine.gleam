@@ -367,40 +367,45 @@ pub fn place_piece(
   source_coords: Option(Coords),
 ) {
   let target_square = retrieve_square(game.board, target_coords)
-
   case is_placement_legal(target_piece, target_square) {
     Error(reason) -> Error("Placement not legal because: " <> reason)
     Ok(_) -> {
-      let updated_squares = case source_coords {
-        Some(dest_coords) -> {
-          let source_square = retrieve_square(game.board, dest_coords)
+      let updated_game =
+        execute_placement(game, source_coords, target_piece, target_square)
 
-          [
-            Square(..target_square, piece: Some(target_piece)),
-            Square(..source_square, piece: None),
-          ]
-        }
-
-        None -> [Square(..target_square, piece: Some(target_piece))]
-      }
-
-      let board = update_board(game.board, updated_squares)
-      let positioning = is_positioning(board)
-      let remains_movements = case positioning {
+      let positioning = is_positioning(game.board)
+      let remaining_moves = case positioning {
         True -> 0
         False -> 4
       }
 
-      Ok(
-        Game(
-          ..game,
-          board: board,
-          positioning: positioning,
-          remaining_moves: remains_movements,
-        ),
-      )
+      Ok(Game(..updated_game, positioning:, remaining_moves:))
     }
   }
+}
+
+pub fn execute_placement(
+  game: Game,
+  source_coords: Option(Coords),
+  target_piece: Piece,
+  target_square: Square,
+) {
+  let updated_squares = case source_coords {
+    Some(source_coords) -> {
+      let source_square = retrieve_square(game.board, source_coords)
+
+      [
+        Square(..target_square, piece: Some(target_piece)),
+        Square(..source_square, piece: None),
+      ]
+    }
+
+    None -> [Square(..target_square, piece: Some(target_piece))]
+  }
+
+  let board = update_board(game.board, updated_squares)
+
+  Game(..game, board: board)
 }
 
 pub fn is_movement_legal(
@@ -551,7 +556,7 @@ pub fn is_positioning(board: Board) {
   list.any(position_squares, fn(square) { square.piece == None })
 }
 
-fn retrieve_square(board: Board, coords: Coords) {
+pub fn retrieve_square(board: Board, coords: Coords) {
   let assert Ok(square) =
     list.find(board, fn(square) {
       let #(x, y) = coords
@@ -561,7 +566,7 @@ fn retrieve_square(board: Board, coords: Coords) {
   square
 }
 
-fn retrieve_square_from_piece(board: Board, piece: Piece) {
+pub fn retrieve_square_from_piece(board: Board, piece: Piece) {
   let assert Ok(square) =
     list.find(board, fn(square) { square.piece == Some(piece) })
 
