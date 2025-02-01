@@ -484,25 +484,35 @@ pub fn perform_captures(game: Game) {
 }
 
 pub fn check_win(game: Game) {
-  let win =
-    list.any(game.board, fn(square) {
-      check_rabbit_win(square) || check_all_piece_captured_win(game.board)
-    })
-
-  Game(..game, win: win)
+  Game(
+    ..game,
+    win: player_has_all_pieces_captured(game.board) || is_rabbit_win(game.board),
+  )
 }
 
-fn check_rabbit_win(square: Square) {
-  case square.piece, square.x {
-    Some(Piece(Rabbit, Gold, _)), 8 -> True
-    Some(Piece(Rabbit, Silver, _)), 1 -> True
-    _, _ -> False
+fn is_rabbit_win(board: Board) {
+  board
+  |> list.filter(fn(square) { list.contains([1, 8], square.x) })
+  |> list.any(fn(square) {
+    case square.piece, square.x {
+      Some(Piece(Rabbit, Gold, _)), 8 -> True
+      Some(Piece(Rabbit, Silver, _)), 1 -> True
+      _, _ -> False
+    }
+  })
+}
+
+fn player_has_all_pieces_captured(board: Board) {
+  let #(gold_pieces, silver_pieces) = {
+    use acc, square <- list.fold(board, #([], []))
+    case square.piece {
+      Some(piece) if piece.color == Gold -> #([piece, ..acc.0], acc.1)
+      Some(piece) if piece.color == Silver -> #(acc.0, [piece, ..acc.1])
+      _ -> acc
+    }
   }
-}
 
-fn check_all_piece_captured_win(_board: Board) {
-  // todo: implement this
-  False
+  list.is_empty(gold_pieces) || list.is_empty(silver_pieces)
 }
 
 pub fn get_aviable_pieces_to_place(board: Board) {
