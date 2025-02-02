@@ -1,5 +1,5 @@
+import gleam/bool
 import gleam/int
-import gleam/io
 import gleam/list
 import gleam/option.{type Option, None, Some}
 import lustre
@@ -34,68 +34,81 @@ pub opaque type Msg {
   PlacePiece(target_square: game_engine.Square)
   MovePiece(target_square: game_engine.Square)
   RepositionPiece(target_square: game_engine.Square)
+  Undo
 }
 
 pub fn update(model: Model, msg: Msg) -> Model {
-  io.println("Updating model with msg: ")
   // Don't process any messages if game is won
-  case model.game.win {
-    True -> model
-    False -> {
-      case msg {
-        Opting(piece) -> {
-          Model(..model, opting_piece: Some(piece), error: None)
-        }
-        EnemyOpting(piece) -> {
-          Model(..model, enemy_opting_piece: Some(piece), error: None)
-        }
-        PlacePiece(target_square) -> {
-          case model.opting_piece {
-            Some(piece) -> {
-              case
-                list.find(model.game.board, fn(square) {
-                  square.piece == Some(piece)
-                })
-              {
-                Ok(dest_square) ->
-                  place_piece(
-                    model,
-                    #(target_square.x, target_square.y),
-                    piece,
-                    Some(#(dest_square.x, dest_square.y)),
-                  )
-                Error(_) ->
-                  place_piece(
-                    model,
-                    #(target_square.x, target_square.y),
-                    piece,
-                    None,
-                  )
-              }
-            }
-            None -> model
+  use <- bool.guard(model.game.win, model)
+
+  case msg {
+    Undo -> Model(..model, game: game_engine.undo_last_move(model.game))
+
+    Opting(piece) -> {
+      // deselect if the user touches the same piece twice
+      let opting_piece = case model.opting_piece {
+        Some(p) if p == piece -> None
+        _ -> Some(piece)
+      }
+
+      Model(..model, opting_piece:, error: None)
+    }
+
+    EnemyOpting(piece) -> {
+      // deselect if the user touches the same piece twice
+      let enemy_opting_piece = case model.enemy_opting_piece {
+        Some(p) if p == piece -> None
+        _ -> Some(piece)
+      }
+
+      Model(..model, enemy_opting_piece:, error: None)
+    }
+
+    PlacePiece(target_square) -> {
+      case model.opting_piece {
+        Some(piece) -> {
+          case
+            list.find(model.game.board, fn(square) {
+              square.piece == Some(piece)
+            })
+          {
+            Ok(dest_square) ->
+              place_piece(
+                model,
+                #(target_square.x, target_square.y),
+                piece,
+                Some(#(dest_square.x, dest_square.y)),
+              )
+            Error(_) ->
+              place_piece(
+                model,
+                #(target_square.x, target_square.y),
+                piece,
+                None,
+              )
           }
         }
-
-        MovePiece(target_square) ->
-          case model.opting_piece {
-            Some(piece) ->
-              move_piece(model, piece, #(target_square.x, target_square.y))
-
-            None -> model
-          }
-
-        RepositionPiece(target_square) ->
-          case model.opting_piece, model.enemy_opting_piece {
-            Some(strong_piece), Some(weak_piece) ->
-              reposition_piece(model, strong_piece, weak_piece, #(
-                target_square.x,
-                target_square.y,
-              ))
-            _, _ -> model
-          }
+        None -> model
       }
     }
+
+    MovePiece(target_square) ->
+      case model.opting_piece {
+        Some(piece) ->
+          move_piece(model, piece, #(target_square.x, target_square.y))
+
+        None -> model
+      }
+
+    RepositionPiece(target_square) ->
+      case model.opting_piece, model.enemy_opting_piece {
+        Some(strong_piece), Some(weak_piece) ->
+          reposition_piece(model, strong_piece, weak_piece, #(
+            target_square.x,
+            target_square.y,
+          ))
+        _, _ -> model
+      }
   }
 }
 
@@ -130,6 +143,14 @@ pub fn view(model: Model) -> element.Element(Msg) {
           html.text(
             " | Moves remaining: " <> int.to_string(model.game.remaining_moves),
           ),
+          case could_undo(model.game) {
+            True ->
+              html.button(
+                [attribute.class("undo-button"), event.on_click(Undo)],
+                [html.text("Undo")],
+              )
+            False -> html.text("")
+          },
         ]),
       ]),
       html.div(
@@ -186,7 +207,7 @@ pub fn view(model: Model) -> element.Element(Msg) {
             list.filter(available_pieces, fn(piece) {
               piece.color == game_engine.Gold
             }),
-            fn(piece) { piece_view(piece) },
+            fn(piece) { render_piece(piece) },
           ),
         ),
         html.div(
@@ -195,7 +216,7 @@ pub fn view(model: Model) -> element.Element(Msg) {
             list.filter(available_pieces, fn(piece) {
               piece.color == game_engine.Silver
             }),
-            fn(piece) { piece_view(piece) },
+            fn(piece) { render_piece(piece) },
           ),
         ),
         board_view,
@@ -211,7 +232,7 @@ fn render_square(
 ) -> element.Element(Msg) {
   let piece_element = case square.piece {
     Some(piece) -> {
-      let asset_name = game_engine.get_piece_asset_name(piece)
+      let asset_name = get_piece_asset_name(piece)
 
       html.div([attribute.class("piece")], [
         html.img([attribute.src(asset_name), attribute.alt("Piece")]),
@@ -263,10 +284,10 @@ pub fn main() {
   Nil
 }
 
-fn piece_view(piece: game_engine.Piece) {
+fn render_piece(piece: game_engine.Piece) {
   html.button([event.on_click(Opting(piece))], [
     html.img([
-      attribute.src(game_engine.get_piece_asset_name(piece)),
+      attribute.src(get_piece_asset_name(piece)),
       attribute.alt("Piece"),
     ]),
   ])
@@ -352,6 +373,12 @@ fn reposition_piece(
   }
 }
 
+fn could_undo(game: game_engine.Game) -> Bool {
+  list.length(game.history) > 0
+  && game.positioning == False
+  && game.remaining_moves != 4
+}
+
 fn build_piece_id(piece: game_engine.Piece) -> String {
   "piece-"
   <> game_engine.piece_color_to_string(piece.color)
@@ -363,4 +390,12 @@ fn build_piece_id(piece: game_engine.Piece) -> String {
 
 fn build_square_id(square: game_engine.Square) -> String {
   "square-" <> int.to_string(square.x) <> "-" <> int.to_string(square.y)
+}
+
+fn get_piece_asset_name(piece: game_engine.Piece) {
+  let color = game_engine.piece_color_to_string(piece.color)
+
+  let kind = game_engine.piece_kind_to_string(piece.kind)
+
+  "assets/pieces/" <> color <> "_" <> kind <> ".png"
 }
