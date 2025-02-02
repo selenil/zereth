@@ -9,6 +9,8 @@ pub type Game {
     board: Board,
     /// The previous board state (for checking if the board has changed between turns)
     previous_board: Option(Board),
+    /// The history of moves made in the game
+    history: List(Delta),
     /// The color of the current player's turn
     current_player_color: PieceColor,
     /// Number of moves remaining in the current turn
@@ -17,6 +19,17 @@ pub type Game {
     positioning: Bool,
     /// Whether the game has been won
     win: Bool,
+  )
+}
+
+/// Represents a change in the game state
+pub type Delta {
+  Move(source_coords: Coords, target_coords: Coords)
+  Reposition(
+    strong_piece_source_coords: Coords,
+    weak_piece_source_coords: Coords,
+    target_coords: Coords,
+    reposition_type: RepositionType,
   )
 }
 
@@ -85,6 +98,7 @@ pub fn new_game() -> Game {
   Game(
     board: new_board(),
     previous_board: None,
+    history: [],
     current_player_color: Gold,
     remaining_moves: 0,
     positioning: True,
@@ -97,6 +111,7 @@ pub fn new_debug_game() -> Game {
   Game(
     board: new_debug_board(),
     previous_board: None,
+    history: [],
     current_player_color: Gold,
     remaining_moves: 4,
     positioning: False,
@@ -218,6 +233,13 @@ pub fn move_piece(
           ..game,
           board: updated_board,
           remaining_moves: game.remaining_moves - 1,
+          history: [
+            Move(#(source_square.x, source_square.y), #(
+              target_square.x,
+              target_square.y,
+            )),
+            ..game.history
+          ],
         ),
       )
     }
@@ -480,6 +502,15 @@ fn execute_reposition(
               ..game,
               board: updated_board,
               remaining_moves: game.remaining_moves - 2,
+              history: [
+                Reposition(
+                  #(strong_piece_square.x, strong_piece_square.y),
+                  #(weak_piece_square.x, weak_piece_square.y),
+                  #(target_square.x, target_square.y),
+                  reposition_type,
+                ),
+                ..game.history
+              ],
             ),
           )
         }
@@ -644,6 +675,74 @@ pub fn is_positioning(board: Board) -> Bool {
     })
 
   list.any(position_squares, fn(square) { square.piece == None })
+}
+
+pub fn undo_last_move(game: Game) -> Game {
+  let assert [last_move, ..history] = game.history
+
+  case last_move {
+    Move(source_coords, target_coords) -> {
+      let source_square = retrieve_square(game.board, source_coords)
+      let target_square = retrieve_square(game.board, target_coords)
+      let assert Some(target_piece) = target_square.piece
+
+      let updated_board =
+        update_board(game.board, [
+          Square(..source_square, piece: Some(target_piece)),
+          Square(..target_square, piece: None),
+        ])
+
+      Game(
+        ..game,
+        board: updated_board,
+        remaining_moves: game.remaining_moves + 1,
+        history:,
+      )
+    }
+
+    Reposition(
+      strong_piece_source_coords,
+      weak_piece_source_coords,
+      target_coords,
+      reposition_type,
+    ) -> {
+      let strong_piece_source_square =
+        retrieve_square(game.board, strong_piece_source_coords)
+      let weak_piece_source_square =
+        retrieve_square(game.board, weak_piece_source_coords)
+
+      let target_square = retrieve_square(game.board, target_coords)
+
+      let #(strong_piece, weak_piece) = case reposition_type {
+        Pull -> {
+          let assert Some(strong_piece) = target_square.piece
+          let assert Some(weak_piece) = strong_piece_source_square.piece
+
+          #(strong_piece, weak_piece)
+        }
+        Push -> {
+          let assert Some(strong_piece) = weak_piece_source_square.piece
+          let assert Some(weak_piece) = target_square.piece
+
+          #(strong_piece, weak_piece)
+        }
+      }
+
+      let updated_board =
+        update_board(game.board, [
+          Square(..strong_piece_source_square, piece: Some(strong_piece)),
+          Square(..weak_piece_source_square, piece: Some(weak_piece)),
+          Square(..target_square, piece: None),
+        ])
+
+      Game(
+        ..game,
+        board: updated_board,
+        remaining_moves: game.remaining_moves + 2,
+        history:,
+      )
+    }
+  }
 }
 
 /// Removes pieces on trap squares with no adjacent friendly pieces

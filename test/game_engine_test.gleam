@@ -346,3 +346,78 @@ pub fn get_available_pieces_some_placed_test() {
   should.equal(list.length(available), 31)
   should.be_false(list.contains(available, elephant))
 }
+
+pub fn undo_last_move_simple_movement_test() {
+  let piece = Piece(Horse, Gold, 1)
+  let game = setup_test_game([#(piece, #(2, 2))])
+
+  let assert Ok(updated_game) = game_engine.move_piece(game, piece, #(2, 3))
+
+  let undone_game = game_engine.undo_last_move(updated_game)
+
+  let assert Ok(original_square) =
+    list.find(undone_game.board, fn(s) { s.x == 2 && s.y == 2 })
+
+  should.equal(original_square.piece, Some(piece))
+
+  let assert Ok(target_square) =
+    list.find(undone_game.board, fn(s) { s.x == 2 && s.y == 3 })
+  should.equal(target_square.piece, None)
+
+  should.equal(undone_game.remaining_moves, updated_game.remaining_moves + 1)
+
+  should.equal(undone_game.history, [])
+}
+
+pub fn undo_last_move_push_reposition_test() {
+  let elephant = Piece(Elephant, Gold, 1)
+  let rabbit = Piece(Rabbit, Silver, 1)
+  let game = setup_test_game([#(elephant, #(4, 4)), #(rabbit, #(4, 5))])
+
+  let assert Ok(updated_game) =
+    game_engine.reposition_piece(game, elephant, rabbit, #(4, 6))
+
+  let undone_game = game_engine.undo_last_move(updated_game)
+
+  let assert Ok(elephant_square) =
+    list.find(undone_game.board, fn(s) { s.x == 4 && s.y == 4 })
+  should.equal(elephant_square.piece, Some(elephant))
+
+  let assert Ok(rabbit_square) =
+    list.find(undone_game.board, fn(s) { s.x == 4 && s.y == 5 })
+  should.equal(rabbit_square.piece, Some(rabbit))
+
+  let assert Ok(target_square) =
+    list.find(undone_game.board, fn(s) { s.x == 4 && s.y == 6 })
+  should.equal(target_square.piece, None)
+
+  should.equal(undone_game.remaining_moves, updated_game.remaining_moves + 2)
+  should.equal(undone_game.history, [])
+}
+
+pub fn undo_last_move_pull_reposition_test() {
+  let elephant = Piece(Elephant, Gold, 1)
+  let rabbit = Piece(Rabbit, Silver, 1)
+  let game = setup_test_game([#(elephant, #(4, 4)), #(rabbit, #(4, 5))])
+
+  let assert Ok(updated_game) =
+    game_engine.reposition_piece(game, elephant, rabbit, #(4, 3))
+
+  let undone_game = game_engine.undo_last_move(updated_game)
+
+  let assert Ok(elephant_square) =
+    list.find(undone_game.board, fn(s) { s.x == 4 && s.y == 4 })
+  should.equal(elephant_square.piece, Some(elephant))
+
+  let assert Ok(rabbit_square) =
+    list.find(undone_game.board, fn(s) { s.x == 4 && s.y == 5 })
+  should.equal(rabbit_square.piece, Some(rabbit))
+
+  let assert Ok(target_square) =
+    list.find(undone_game.board, fn(s) { s.x == 4 && s.y == 3 })
+  should.equal(target_square.piece, None)
+
+  should.equal(undone_game.remaining_moves, updated_game.remaining_moves + 2)
+
+  should.equal(undone_game.history, [])
+}
