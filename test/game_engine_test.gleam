@@ -1,6 +1,6 @@
 import game_engine.{
-  type Game, type Piece, Cat, Dog, Elephant, Game, Gold, Horse, Piece, Rabbit,
-  Silver,
+  type Game, type Piece, type PieceColor, Camel, Cat, Dog, Elephant, Game, Gold,
+  Horse, Piece, Rabbit, Silver,
 }
 import gleam/list
 import gleam/option.{None, Some}
@@ -185,4 +185,126 @@ pub fn place_piece_with_source_coords_test() {
     list.find(updated_game.board, fn(s) { s.x == 1 && s.y == 1 })
 
   should.equal(old_square.piece, None)
+}
+
+pub fn is_piece_frozen_by_stronger_enemy_test() {
+  let rabbit = Piece(Rabbit, Gold, 1)
+  let elephant = Piece(Elephant, Silver, 1)
+
+  let game = setup_test_game([#(rabbit, #(4, 4)), #(elephant, #(4, 5))])
+
+  let rabbit_square = game_engine.retrieve_square(game.board, #(4, 4))
+  should.be_true(game_engine.is_piece_frozen(game.board, rabbit, rabbit_square))
+}
+
+pub fn is_piece_not_frozen_with_ally_adjacent_test() {
+  let rabbit = Piece(Rabbit, Gold, 1)
+  let elephant = Piece(Elephant, Silver, 1)
+  let dog = Piece(Dog, Gold, 1)
+
+  let game =
+    setup_test_game([#(rabbit, #(4, 4)), #(elephant, #(4, 5)), #(dog, #(4, 3))])
+
+  let rabbit_square = game_engine.retrieve_square(game.board, #(4, 4))
+  should.be_false(game_engine.is_piece_frozen(game.board, rabbit, rabbit_square))
+}
+
+pub fn perform_captures_piece_on_trap_no_allies_test() {
+  let rabbit = Piece(Rabbit, Gold, 1)
+  let game = setup_test_game([#(rabbit, #(3, 3))])
+
+  let updated_game = game_engine.perform_captures(game)
+
+  let trap_square = game_engine.retrieve_square(updated_game.board, #(3, 3))
+  should.equal(trap_square.piece, None)
+}
+
+pub fn perform_captures_piece_on_trap_with_ally_test() {
+  let rabbit = Piece(Rabbit, Gold, 1)
+  let dog = Piece(Dog, Gold, 1)
+
+  let game = setup_test_game([#(rabbit, #(3, 3)), #(dog, #(3, 4))])
+
+  let updated_game = game_engine.perform_captures(game)
+
+  let trap_square = game_engine.retrieve_square(updated_game.board, #(3, 3))
+  should.equal(trap_square.piece, Some(rabbit))
+}
+
+pub fn check_win_rabbit_reaches_goal_test() {
+  let gold_rabbit = Piece(Rabbit, Gold, 1)
+  let silver_rabbit = Piece(Rabbit, Silver, 1)
+
+  let gold_win_game = setup_test_game([#(gold_rabbit, #(8, 4))])
+  let gold_win_result = game_engine.check_win(gold_win_game)
+  should.be_true(gold_win_result.win)
+
+  let silver_win_game = setup_test_game([#(silver_rabbit, #(1, 4))])
+  let silver_win_result = game_engine.check_win(silver_win_game)
+  should.be_true(silver_win_result.win)
+}
+
+pub fn check_win_all_pieces_captured_test() {
+  let elephant = Piece(Elephant, Gold, 1)
+
+  let game = setup_test_game([#(elephant, #(4, 4))])
+
+  let result = game_engine.check_win(game)
+  should.be_true(result.win)
+}
+
+pub fn is_piece_stronger_test() {
+  let elephant = Piece(Elephant, Gold, 1)
+  let camel = Piece(Camel, Silver, 1)
+  let rabbit = Piece(Rabbit, Gold, 1)
+
+  should.be_true(game_engine.is_piece_stronger(elephant, camel))
+  should.be_true(game_engine.is_piece_stronger(camel, rabbit))
+  should.be_false(game_engine.is_piece_stronger(rabbit, elephant))
+}
+
+pub fn is_positioning_initial_board_test() {
+  let game = game_engine.new_game()
+  should.be_true(game_engine.is_positioning(game.board))
+}
+
+pub fn is_positioning_completed_setup_test() {
+  let build_piece = fn(i: Int, piece_color: PieceColor) {
+    let x = case i < 9, piece_color {
+      True, Gold -> 1
+      False, Gold -> 2
+      True, Silver -> 8
+      False, Silver -> 7
+    }
+    let y = case i < 9 {
+      True -> i
+      False -> i - 8
+    }
+
+    #(Piece(Rabbit, piece_color, i), #(x, y))
+  }
+
+  let pieces =
+    list.range(1, 16)
+    |> list.flat_map(fn(i) { [build_piece(i, Gold), build_piece(i, Silver)] })
+
+  let game = setup_test_game(pieces)
+  should.be_false(game_engine.is_positioning(game.board))
+}
+
+pub fn get_available_pieces_empty_board_test() {
+  let game = game_engine.new_game()
+  let available = game_engine.get_aviable_pieces_to_place(game.board)
+
+  should.equal(list.length(available), 32)
+}
+
+pub fn get_available_pieces_some_placed_test() {
+  let elephant = Piece(Elephant, Gold, 1)
+  let game = setup_test_game([#(elephant, #(1, 1))])
+
+  let available = game_engine.get_aviable_pieces_to_place(game.board)
+
+  should.equal(list.length(available), 31)
+  should.be_false(list.contains(available, elephant))
 }

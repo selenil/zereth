@@ -574,38 +574,29 @@ pub fn retrieve_square_from_piece(board: Board, piece: Piece) {
 }
 
 pub fn is_piece_frozen(board: Board, piece: Piece, source_square: Square) {
-  let adjacents_pieces =
+  let adjacent_pieces =
     adjacent_pieces(board, #(source_square.x, source_square.y))
 
-  case
-    list.all(adjacents_pieces, fn(p) {
-      case p {
-        Some(_) -> False
-        None -> True
-      }
-    })
-  {
-    True -> False
-    False -> {
-      let #(enemy_pieces, ally_pieces) =
-        adjacents_pieces
-        |> list.fold(#([], []), fn(acc, p) {
-          case p {
-            Some(ally_piece) if ally_piece.color == piece.color -> #(acc.0, [
-              ally_piece,
-            ])
-            Some(enemy_piece) if enemy_piece.color != piece.color ->
-              case is_piece_stronger(enemy_piece, piece) {
-                True -> #(acc.0, [enemy_piece])
-                False -> acc
-              }
-            _ -> acc
-          }
-        })
+  let #(enemy_pieces, ally_pieces) = {
+    use acc, p <- list.fold(adjacent_pieces, #([], []))
+    case p {
+      Some(ally_piece) if ally_piece.color == piece.color -> #(acc.0, [
+        ally_piece,
+        ..acc.1
+      ])
+      Some(enemy_piece) if enemy_piece.color != piece.color -> #(
+        [enemy_piece, ..acc.0],
+        acc.1,
+      )
 
-      !list.is_empty(enemy_pieces) && list.is_empty(ally_pieces)
+      _ -> acc
     }
   }
+
+  list.any(enemy_pieces, fn(enemy_piece) {
+    is_piece_stronger(enemy_piece, piece)
+  })
+  && list.is_empty(ally_pieces)
 }
 
 pub fn is_rabbit_moving_backwards(
@@ -636,7 +627,7 @@ fn update_board(board: Board, squares: Board) {
   })
 }
 
-fn is_piece_stronger(piece1: Piece, piece2: Piece) {
+pub fn is_piece_stronger(piece1: Piece, piece2: Piece) {
   let strength1 = case
     list.find(pieces_strength, fn(p) { p.0 == piece1.kind })
   {
