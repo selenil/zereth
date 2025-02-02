@@ -421,3 +421,30 @@ pub fn undo_last_move_pull_reposition_test() {
 
   should.equal(undone_game.history, [])
 }
+
+pub fn undo_last_move_with_captures_test() {
+  let elephant = Piece(Elephant, Gold, 1)
+  let rabbit = Piece(Rabbit, Silver, 1)
+  let game = setup_test_game([#(elephant, #(5, 3)), #(rabbit, #(4, 3))])
+
+  let assert Ok(updated_game) =
+    game_engine.reposition_piece(game, elephant, rabbit, #(3, 3))
+
+  let undone_game = game_engine.undo_last_move(updated_game)
+
+  let assert Ok(elephant_square) =
+    list.find(undone_game.board, fn(s) { s.x == 5 && s.y == 3 })
+  should.equal(elephant_square.piece, Some(elephant))
+
+  let assert Ok(rabbit_square) =
+    list.find(undone_game.board, fn(s) { s.x == 4 && s.y == 3 })
+  should.equal(rabbit_square.piece, Some(rabbit))
+
+  let assert Ok(target_square) =
+    list.find(undone_game.board, fn(s) { s.x == 3 && s.y == 3 })
+  should.equal(target_square.piece, None)
+
+  should.equal(undone_game.remaining_moves, updated_game.remaining_moves + 2)
+
+  should.equal(undone_game.history, [])
+}

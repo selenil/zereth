@@ -31,6 +31,7 @@ pub type Delta {
     target_coords: Coords,
     reposition_type: RepositionType,
   )
+  Capture(piece: Piece, trap_coords: Coords)
 }
 
 /// Represents a square on the game board
@@ -748,32 +749,50 @@ pub fn undo_last_move(game: Game) -> Game {
         history:,
       )
     }
+
+    Capture(piece, trap_coords) -> {
+      let assert True = list.contains(trap_squares, trap_coords)
+      let trap_square = retrieve_square(game.board, trap_coords)
+      let updated_board =
+        update_board(game.board, [Square(..trap_square, piece: Some(piece))])
+
+      undo_last_move(Game(..game, board: updated_board, history:))
+    }
   }
 }
 
 /// Removes pieces on trap squares with no adjacent friendly pieces
 pub fn perform_captures(game: Game) -> Game {
-  let board =
-    list.map(game.board, fn(square) {
-      let coords = #(square.x, square.y)
+  let #(updated_squares, new_history_records) = {
+    use acc, trap_coords <- list.fold(trap_squares, #([], []))
 
-      case square.piece, list.contains(trap_squares, coords) {
-        None, _ -> square
-        Some(_), False -> square
-        Some(piece), True -> {
-          let adjacent_ally_pieces =
-            adjacent_pieces(game.board, coords)
-            |> list.filter(fn(p) { p.color == piece.color })
+    let trap_square = retrieve_square(game.board, trap_coords)
 
-          case list.is_empty(adjacent_ally_pieces) {
-            True -> Square(..square, piece: None)
-            False -> square
-          }
+    case trap_square.piece {
+      Some(piece) -> {
+        let adjacent_ally_pieces =
+          adjacent_pieces(game.board, trap_coords)
+          |> list.filter(fn(p) { p.color == piece.color })
+
+        case list.is_empty(adjacent_ally_pieces) {
+          True -> #([Square(..trap_square, piece: None), ..acc.0], [
+            Capture(piece, trap_coords),
+            ..acc.1
+          ])
+          False -> acc
         }
       }
+      None -> acc
+    }
+  }
+
+  let updated_board = update_board(game.board, updated_squares)
+  let updated_history =
+    list.fold(new_history_records, game.history, fn(acc, record) {
+      [record, ..acc]
     })
 
-  Game(..game, board: board)
+  Game(..game, board: updated_board, history: updated_history)
 }
 
 /// Checks if either player has won the game and updates the game state accordingly.
