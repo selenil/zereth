@@ -7,6 +7,8 @@ pub type Game {
   Game(
     /// The current board state
     board: Board,
+    /// The previous board state (for checking if the board has changed between turns)
+    previous_board: Option(Board),
     /// The color of the current player's turn
     current_player_color: PieceColor,
     /// Number of moves remaining in the current turn
@@ -82,6 +84,7 @@ const pieces_amount_per_player = [
 pub fn new_game() -> Game {
   Game(
     board: new_board(),
+    previous_board: None,
     current_player_color: Gold,
     remaining_moves: 0,
     positioning: True,
@@ -93,6 +96,7 @@ pub fn new_game() -> Game {
 pub fn new_debug_game() -> Game {
   Game(
     board: new_debug_board(),
+    previous_board: None,
     current_player_color: Gold,
     remaining_moves: 4,
     positioning: False,
@@ -154,12 +158,15 @@ pub fn pass_turn(game: Game) -> Game {
   case game.remaining_moves == 0 {
     False -> game
     True ->
-      Game(..game, remaining_moves: 4, current_player_color: case
-        game.current_player_color
-      {
-        Gold -> Silver
-        Silver -> Gold
-      })
+      Game(
+        ..game,
+        previous_board: Some(game.board),
+        remaining_moves: 4,
+        current_player_color: case game.current_player_color {
+          Gold -> Silver
+          Silver -> Gold
+        },
+      )
   }
 }
 
@@ -200,6 +207,11 @@ pub fn move_piece(
   case validate_move(game.board, piece, source_square, target_square) {
     Ok(_) -> {
       let updated_board = execute_move(game.board, source_square, target_square)
+      use <- bool.guard(
+        game.remaining_moves == 1
+          && !check_if_board_changed(game, updated_board),
+        Error("Invalid move. A turn has to produce a nate change in the board"),
+      )
 
       Ok(
         Game(
@@ -235,6 +247,13 @@ fn validate_move(
     Error(reason), _, _ -> Error("Movement not legal because: " <> reason)
     _, True, _ -> Error("Piece is frozen")
     _, _, True -> Error("Rabbits cannot move backwards")
+  }
+}
+
+fn check_if_board_changed(game: Game, updated_board: Board) {
+  case game.previous_board {
+    Some(previous_board) -> previous_board != updated_board
+    None -> True
   }
 }
 
@@ -306,13 +325,8 @@ pub fn is_rabbit_moving_backwards(
   target_square: Square,
 ) -> Bool {
   case piece.kind {
-    Rabbit -> {
-      case piece.color {
-        Gold -> target_square.x < source_square.x
-
-        Silver -> target_square.x > source_square.x
-      }
-    }
+    Rabbit if piece.color == Gold -> target_square.x < source_square.x
+    Rabbit if piece.color == Silver -> target_square.x > source_square.x
     _ -> False
   }
 }
@@ -446,14 +460,25 @@ fn execute_reposition(
             )
           }
 
+          let updated_board =
+            update_board(game.board, [
+              weak_piece_square,
+              target_square,
+              strong_piece_square,
+            ])
+
+          use <- bool.guard(
+            game.remaining_moves == 2
+              && !check_if_board_changed(game, updated_board),
+            Error(
+              "Invalid move. A turn has to produce a nate change in the board",
+            ),
+          )
+
           Ok(
             Game(
               ..game,
-              board: update_board(game.board, [
-                weak_piece_square,
-                target_square,
-                strong_piece_square,
-              ]),
+              board: updated_board,
               remaining_moves: game.remaining_moves - 2,
             ),
           )
