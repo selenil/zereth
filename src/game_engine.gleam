@@ -90,7 +90,7 @@ pub fn new_game() -> Game {
 }
 
 /// Creates a new game with a pre-configured board for debugging
-pub fn new_debug_game() {
+pub fn new_debug_game() -> Game {
   Game(
     board: new_debug_board(),
     current_player_color: Gold,
@@ -100,9 +100,57 @@ pub fn new_debug_game() {
   )
 }
 
+fn new_board() {
+  list.range(1, 8)
+  |> list.flat_map(fn(x) {
+    list.map(list.range(1, 8), fn(y) { Square(x, y, None) })
+  })
+  |> list.reverse()
+}
+
+fn new_debug_board() {
+  list.range(1, 8)
+  |> list.flat_map(fn(x) {
+    list.map(list.range(1, 8), fn(y) {
+      Square(x, y, case x, y {
+        2, y -> Some(Piece(Rabbit, Gold, y))
+        7, y -> Some(Piece(Rabbit, Silver, y))
+        1, 1 -> Some(Piece(Horse, Gold, 1))
+        1, 8 -> Some(Piece(Horse, Gold, 2))
+        8, 1 -> Some(Piece(Horse, Silver, 1))
+        8, 8 -> Some(Piece(Horse, Silver, 1))
+        1, 2 -> Some(Piece(Dog, Gold, 1))
+        1, 7 -> Some(Piece(Dog, Gold, 2))
+        8, 2 -> Some(Piece(Dog, Silver, 1))
+        8, 7 -> Some(Piece(Dog, Silver, 2))
+        1, 3 -> Some(Piece(Cat, Gold, 1))
+        1, 6 -> Some(Piece(Cat, Gold, 2))
+        8, 3 -> Some(Piece(Cat, Silver, 1))
+        8, 6 -> Some(Piece(Cat, Silver, 2))
+        1, 4 -> Some(Piece(Elephant, Gold, 1))
+        8, 4 -> Some(Piece(Elephant, Silver, 1))
+        1, 5 -> Some(Piece(Camel, Gold, 1))
+        8, 5 -> Some(Piece(Camel, Silver, 1))
+        _, _ -> None
+      })
+    })
+  })
+  |> list.reverse()
+}
+
+fn update_board(board: Board, squares: Board) {
+  use acc, square <- list.fold(squares, board)
+  use s <- list.map(acc)
+
+  case s.x == square.x && s.y == square.y {
+    True -> square
+    False -> s
+  }
+}
+
 /// Passes the turn to the next player if no moves remain
 /// Returns the same game state if moves still remain
-pub fn pass_turn(game: Game) {
+pub fn pass_turn(game: Game) -> Game {
   case game.remaining_moves == 0 {
     False -> game
     True ->
@@ -115,12 +163,27 @@ pub fn pass_turn(game: Game) {
   }
 }
 
-/// Moves a piece to an adjacent square if the move is legal
-/// Returns Error if:
-/// - No moves remain in the turn
-/// - The move is not to an adjacent square
-/// - The piece is frozen
-/// - A rabbit attempts to move backwards
+/// Attempts to move the specified `piece` by the given
+/// `target_coords`. In Arimaa, pieces moves one square per time and only
+/// in ortogonal directions. Also, another set of rules determines if a
+/// piece can move or not.
+///
+/// This function performs several checks to ensure the move is legal:
+/// - Verifies that the game has remaining moves.
+/// - Checks if the movement is within legal bounds.
+/// - Ensures the piece is not frozen.
+/// - Prevents rabbits from moving backwards.
+///
+/// ## Parameters
+///
+/// - `game`: The current state of the game.
+/// - `piece`: The piece to be moved.
+/// - `delta_coords`: The change in coordinates for the move.
+///
+/// ## Returns
+///
+/// - `Ok(Game)`: The updated game state after the move.
+/// - `Error(String)`: An error message if the move is invalid.
 pub fn move_piece(
   game: Game,
   piece: Piece,
@@ -150,12 +213,135 @@ pub fn move_piece(
   }
 }
 
-/// Repositions a weaker enemy piece using a stronger piece
-/// Returns Error if:
-/// - Less than 2 moves remain
-/// - Pieces are the same color
-/// - Strong piece is not actually stronger
-/// - The movement is not legal
+fn execute_move(board: Board, source_square: Square, target_square: Square) {
+  let updated_source_square = Square(..source_square, piece: None)
+  let updated_target_square =
+    Square(..target_square, piece: source_square.piece)
+  update_board(board, [updated_source_square, updated_target_square])
+}
+
+fn validate_move(
+  board: Board,
+  piece: Piece,
+  source_square: Square,
+  target_square: Square,
+) -> Result(Nil, String) {
+  case
+    is_movement_legal(source_square, target_square),
+    is_piece_frozen(board, piece, source_square),
+    is_rabbit_moving_backwards(piece, source_square, target_square)
+  {
+    Ok(_), False, False -> Ok(Nil)
+    Error(reason), _, _ -> Error("Movement not legal because: " <> reason)
+    _, True, _ -> Error("Piece is frozen")
+    _, _, True -> Error("Rabbits cannot move backwards")
+  }
+}
+
+/// Checks if a movement between squares is legal according to the rules
+/// of the game.
+///
+/// Checks if:
+/// - Source square has no piece
+/// - Target square is occupied
+/// - Target is not adjacent
+///
+/// This function only performs core checks and it is not exhaustive. In order
+/// validate a given movement, we need to perform additional checks depending on
+/// the movement.
+///
+/// ## Returns
+///
+///
+pub fn is_movement_legal(
+  source_square: Square,
+  target_square: Square,
+) -> Result(Nil, String) {
+  use <- bool.guard(
+    source_square.piece == None,
+    Error("Not a piece in the source square"),
+  )
+
+  use <- bool.guard(
+    target_square.piece != None,
+    Error("Already a piece in the target square"),
+  )
+
+  let adjacent_coords = adjacent_coords(#(source_square.x, source_square.y))
+  use <- bool.guard(
+    !list.contains(adjacent_coords, #(target_square.x, target_square.y)),
+    Error("Not an adjacent square"),
+  )
+
+  Ok(Nil)
+}
+
+/// Checks if a piece is frozen (surrounded by stronger enemy pieces with no friendly pieces adjacent)
+pub fn is_piece_frozen(
+  board: Board,
+  piece: Piece,
+  source_square: Square,
+) -> Bool {
+  let adjacent_pieces =
+    adjacent_pieces(board, #(source_square.x, source_square.y))
+
+  let #(ally_pieces, enemy_pieces) = {
+    use acc, p <- list.fold(adjacent_pieces, #([], []))
+    case p.color == piece.color {
+      True -> #([p, ..acc.0], acc.1)
+      False -> #(acc.0, [p, ..acc.1])
+    }
+  }
+
+  list.any(enemy_pieces, fn(enemy_piece) {
+    is_piece_stronger(enemy_piece, piece)
+  })
+  && list.is_empty(ally_pieces)
+}
+
+/// Checks if a rabbit is attempting to move backwards
+pub fn is_rabbit_moving_backwards(
+  piece: Piece,
+  source_square: Square,
+  target_square: Square,
+) -> Bool {
+  case piece.kind {
+    Rabbit -> {
+      case piece.color {
+        Gold -> target_square.x < source_square.x
+
+        Silver -> target_square.x > source_square.x
+      }
+    }
+    _ -> False
+  }
+}
+
+/// Attempts to reposition a weaker piece using a stronger piece via push or pull maneuvers.
+///
+/// In Arimaa, a stronger piece can reposition an adjacent weaker opponent's piece by either:
+/// - **Pulling**: The stronger piece moves into an adjacent empty square, pulling the weaker piece into the vacated square.
+/// - **Pushing**: The stronger piece pushes the weaker piece into an adjacent empty square and then moves into the weaker piece's original square.
+///
+/// This function checks if the `strong_piece` can reposition the `weak_piece` to the `target_coords` using either maneuver. It ensures that:
+/// - The turn has at least two remaining moves.
+/// - Both specified pieces exist on the board.
+/// - The `strong_piece` is indeed stronger than the `weak_piece`.
+/// - The `target_coords` is adjacent to the `strong_piece`.
+///
+/// If all conditions are met, it performs the appropriate maneuver and updates the game state.
+///
+/// ## Parameters
+///
+/// - `game`: The current state of the game.
+/// - `strong_piece`: The piece attempting to reposition the weaker piece.
+/// - `weak_piece`: The piece to be repositioned.
+/// - `target_coords`: The target coordinates for the weaker piece after the maneuver.
+///
+/// ## Returns
+///
+/// - `Ok(Game)`: The updated game state after the reposition.
+/// - `Error(String)`: An error message if the reposition is invalid.
 pub fn reposition_piece(
   game: Game,
   strong_piece: Piece,
@@ -202,386 +388,6 @@ pub fn reposition_piece(
     target_square,
     reposition_type,
   )
-}
-
-/// Places a piece on the board during the positioning phase
-/// Returns Error if:
-/// - The target square is occupied
-/// - The placement is in an invalid territory
-pub fn place_piece(
-  game: Game,
-  target_coords: Coords,
-  target_piece: Piece,
-  source_coords: Option(Coords),
-) {
-  let target_square = retrieve_square(game.board, target_coords)
-  case is_placement_legal(target_piece, target_square) {
-    Error(reason) -> Error("Placement not legal because: " <> reason)
-    Ok(_) -> {
-      let updated_game =
-        execute_placement(game, source_coords, target_piece, target_square)
-
-      let positioning = is_positioning(game.board)
-      let remaining_moves = case positioning {
-        True -> 0
-        False -> 4
-      }
-
-      Ok(Game(..updated_game, positioning:, remaining_moves:))
-    }
-  }
-}
-
-/// Executes the placement of a piece, updating the board state
-pub fn execute_placement(
-  game: Game,
-  source_coords: Option(Coords),
-  target_piece: Piece,
-  target_square: Square,
-) {
-  let updated_squares = case source_coords {
-    Some(source_coords) -> {
-      let source_square = retrieve_square(game.board, source_coords)
-
-      [
-        Square(..target_square, piece: Some(target_piece)),
-        Square(..source_square, piece: None),
-      ]
-    }
-
-    None -> [Square(..target_square, piece: Some(target_piece))]
-  }
-
-  let board = update_board(game.board, updated_squares)
-
-  Game(..game, board: board)
-}
-
-/// Checks if a movement between squares is legal
-/// Returns Error if:
-/// - Source square has no piece
-/// - Target square is occupied
-/// - Target is not adjacent
-pub fn is_movement_legal(
-  source_square: Square,
-  target_square: Square,
-) -> Result(Nil, String) {
-  use <- bool.guard(
-    source_square.piece == None,
-    Error("Not a piece in the source square"),
-  )
-
-  use <- bool.guard(
-    target_square.piece != None,
-    Error("Already a piece in the target square"),
-  )
-
-  let adjacent_coords = adjacent_coords(#(source_square.x, source_square.y))
-  use <- bool.guard(
-    !list.contains(adjacent_coords, #(target_square.x, target_square.y)),
-    Error("Not an adjacent square"),
-  )
-
-  Ok(Nil)
-}
-
-/// Checks if a piece placement is legal for the given color
-pub fn is_placement_legal(
-  piece: Piece,
-  target_square: Square,
-) -> Result(Nil, String) {
-  use <- bool.guard(
-    target_square.piece != None,
-    Error("There is already a piece in the target square"),
-  )
-
-  case piece.color {
-    Gold -> {
-      use <- bool.guard(
-        !list.contains([1, 2], target_square.x),
-        Error("Attempeted to place a piece in a non-valid square"),
-      )
-      Ok(Nil)
-    }
-
-    Silver -> {
-      use <- bool.guard(
-        !list.contains([7, 8], target_square.x),
-        Error("Attempeted to place a piece in a non-valid square"),
-      )
-      Ok(Nil)
-    }
-  }
-}
-
-/// Captures pieces on trap squares with no adjacent friendly pieces
-pub fn perform_captures(game: Game) {
-  let board =
-    list.map(game.board, fn(square) {
-      let coords = #(square.x, square.y)
-
-      case square.piece, list.contains(trap_squares, coords) {
-        None, _ -> square
-        Some(_), False -> square
-        Some(piece), True -> {
-          let adjacent_ally_pieces =
-            adjacent_pieces(game.board, coords)
-            |> list.filter(fn(p) {
-              case p {
-                Some(p) if p.color == piece.color -> True
-                _ -> False
-              }
-            })
-
-          case list.is_empty(adjacent_ally_pieces) {
-            True -> Square(..square, piece: None)
-            False -> square
-          }
-        }
-      }
-    })
-
-  Game(..game, board: board)
-}
-
-/// Checks if either player has won the game
-pub fn check_win(game: Game) {
-  Game(
-    ..game,
-    win: player_has_all_pieces_captured(game.board) || is_rabbit_win(game.board),
-  )
-}
-
-/// Returns a list of pieces that can still be placed during setup
-pub fn get_aviable_pieces_to_place(board: Board) {
-  let pieces =
-    list.flat_map([Gold, Silver], fn(color) {
-      list.flat_map([Elephant, Camel, Horse, Dog, Cat, Rabbit], fn(kind) {
-        let piece_ids = case
-          list.find(pieces_amount_per_player, fn(p) { p.0 == kind })
-        {
-          Ok(#(_, amount)) -> amount
-          Error(_) -> 0
-        }
-
-        list.map(list.range(1, piece_ids), fn(id) { Piece(kind, color, id) })
-      })
-    })
-
-  let position_squares =
-    list.filter(board, fn(square) {
-      square.x == 1 || square.x == 2 || square.x == 7 || square.x == 8
-    })
-
-  pieces
-  |> list.filter(fn(piece) {
-    list.all(position_squares, fn(square) { square.piece != Some(piece) })
-  })
-  |> list.reverse()
-}
-
-/// Checks if the game is still in the positioning phase
-pub fn is_positioning(board: Board) {
-  let position_squares =
-    list.filter(board, fn(square) {
-      square.x == 1 || square.x == 2 || square.x == 7 || square.x == 8
-    })
-
-  list.any(position_squares, fn(square) { square.piece == None })
-}
-
-/// Retrieves a square at the given coordinates
-pub fn retrieve_square(board: Board, coords: Coords) {
-  let assert Ok(square) =
-    list.find(board, fn(square) {
-      let #(x, y) = coords
-      square.x == x && square.y == y
-    })
-
-  square
-}
-
-/// Finds the square containing the given piece
-pub fn retrieve_square_from_piece(board: Board, piece: Piece) {
-  let assert Ok(square) =
-    list.find(board, fn(square) { square.piece == Some(piece) })
-
-  square
-}
-
-/// Checks if a piece is frozen (surrounded by stronger enemy pieces with no friendly pieces adjacent)
-pub fn is_piece_frozen(board: Board, piece: Piece, source_square: Square) {
-  let adjacent_pieces =
-    adjacent_pieces(board, #(source_square.x, source_square.y))
-
-  let #(enemy_pieces, ally_pieces) = {
-    use acc, p <- list.fold(adjacent_pieces, #([], []))
-    case p {
-      Some(ally_piece) if ally_piece.color == piece.color -> #(acc.0, [
-        ally_piece,
-        ..acc.1
-      ])
-      Some(enemy_piece) if enemy_piece.color != piece.color -> #(
-        [enemy_piece, ..acc.0],
-        acc.1,
-      )
-
-      _ -> acc
-    }
-  }
-
-  list.any(enemy_pieces, fn(enemy_piece) {
-    is_piece_stronger(enemy_piece, piece)
-  })
-  && list.is_empty(ally_pieces)
-}
-
-/// Checks if a rabbit is attempting to move backwards
-pub fn is_rabbit_moving_backwards(
-  piece: Piece,
-  source_square: Square,
-  target_square: Square,
-) {
-  case piece.kind {
-    Rabbit -> {
-      case piece.color {
-        Gold -> target_square.x < source_square.x
-
-        Silver -> target_square.x > source_square.x
-      }
-    }
-    _ -> False
-  }
-}
-
-/// Compares the strength of two pieces
-pub fn is_piece_stronger(piece1: Piece, piece2: Piece) {
-  let strength1 = case
-    list.find(pieces_strength, fn(p) { p.0 == piece1.kind })
-  {
-    Ok(#(_, strength)) -> strength
-    Error(_) -> 0
-  }
-
-  let strength2 = case
-    list.find(pieces_strength, fn(p) { p.0 == piece2.kind })
-  {
-    Ok(#(_, strength)) -> strength
-    Error(_) -> 0
-  }
-
-  strength1 > strength2
-}
-
-/// For a given coordinate, returns the list of all
-/// adyacents coordinate in the board
-pub fn adjacent_coords(coords: Coords) {
-  let #(x, y) = coords
-  let possible = [#(x + 1, y), #(x - 1, y), #(x, y + 1), #(x, y - 1)]
-
-  list.filter(possible, fn(coord) {
-    let #(x, y) = coord
-    x >= 1 && x <= 8 && y >= 1 && y <= 8
-  })
-}
-
-/// Returns a list of pieces in adjacent squares
-pub fn adjacent_pieces(board: Board, coords: Coords) {
-  coords
-  |> adjacent_coords()
-  |> list.map(fn(a_coords) {
-    case list.find(board, fn(s) { s.x == a_coords.0 && s.y == a_coords.1 }) {
-      Ok(s) -> s.piece
-      Error(_) -> None
-    }
-  })
-}
-
-/// Converts a piece color to its string representation
-pub fn piece_color_to_string(piece_color: PieceColor) {
-  case piece_color {
-    Gold -> "gold"
-    Silver -> "silver"
-  }
-}
-
-/// Converts a piece kind to its string representation
-pub fn piece_kind_to_string(piece_kind: PieceKind) {
-  case piece_kind {
-    Elephant -> "elephant"
-    Camel -> "camel"
-    Horse -> "horse"
-    Dog -> "dog"
-    Cat -> "cat"
-    Rabbit -> "rabbit"
-  }
-}
-
-fn new_board() -> Board {
-  list.range(1, 8)
-  |> list.flat_map(fn(x) {
-    list.map(list.range(1, 8), fn(y) { Square(x, y, None) })
-  })
-  |> list.reverse()
-}
-
-fn new_debug_board() {
-  list.range(1, 8)
-  |> list.flat_map(fn(x) {
-    list.map(list.range(1, 8), fn(y) {
-      Square(x, y, case x, y {
-        2, y -> Some(Piece(Rabbit, Gold, y))
-        7, y -> Some(Piece(Rabbit, Silver, y))
-        1, 1 -> Some(Piece(Horse, Gold, 1))
-        1, 8 -> Some(Piece(Horse, Gold, 2))
-        8, 1 -> Some(Piece(Horse, Silver, 1))
-        8, 8 -> Some(Piece(Horse, Silver, 1))
-        1, 2 -> Some(Piece(Dog, Gold, 1))
-        1, 7 -> Some(Piece(Dog, Gold, 2))
-        8, 2 -> Some(Piece(Dog, Silver, 1))
-        8, 7 -> Some(Piece(Dog, Silver, 2))
-        1, 3 -> Some(Piece(Cat, Gold, 1))
-        1, 6 -> Some(Piece(Cat, Gold, 2))
-        8, 3 -> Some(Piece(Cat, Silver, 1))
-        8, 6 -> Some(Piece(Cat, Silver, 2))
-        1, 4 -> Some(Piece(Elephant, Gold, 1))
-        8, 4 -> Some(Piece(Elephant, Silver, 1))
-        1, 5 -> Some(Piece(Camel, Gold, 1))
-        8, 5 -> Some(Piece(Camel, Silver, 1))
-        _, _ -> None
-      })
-    })
-  })
-  |> list.reverse()
-}
-
-fn validate_move(
-  board: Board,
-  piece: Piece,
-  source_square: Square,
-  target_square: Square,
-) -> Result(Nil, String) {
-  case
-    is_movement_legal(source_square, target_square),
-    is_piece_frozen(board, piece, source_square),
-    is_rabbit_moving_backwards(piece, source_square, target_square)
-  {
-    Ok(_), False, False -> Ok(Nil)
-    Error(reason), _, _ -> Error("Movement not legal because: " <> reason)
-    _, True, _ -> Error("Piece is frozen")
-    _, _, True -> Error("Rabbits cannot move backwards")
-  }
-}
-
-fn execute_move(
-  board: Board,
-  source_square: Square,
-  target_square: Square,
-) -> Board {
-  let updated_source_square = Square(..source_square, piece: None)
-  let updated_target_square =
-    Square(..target_square, piece: source_square.piece)
-  update_board(board, [updated_source_square, updated_target_square])
 }
 
 fn execute_reposition(
@@ -660,18 +466,205 @@ fn execute_reposition(
   }
 }
 
-fn update_board(board: Board, squares: Board) {
-  list.fold(squares, board, fn(acc, square) {
-    list.map(acc, fn(s) {
-      case s.x == square.x && s.y == square.y {
-        True -> square
-        False -> s
-      }
-    })
-  })
+/// Checks if `piece1` is stronger than `piece2`
+pub fn is_piece_stronger(piece1: Piece, piece2: Piece) -> Bool {
+  let strength1 = case
+    list.find(pieces_strength, fn(p) { p.0 == piece1.kind })
+  {
+    Ok(#(_, strength)) -> strength
+    Error(_) -> 0
+  }
+
+  let strength2 = case
+    list.find(pieces_strength, fn(p) { p.0 == piece2.kind })
+  {
+    Ok(#(_, strength)) -> strength
+    Error(_) -> 0
+  }
+
+  strength1 > strength2
 }
 
-fn is_rabbit_win(board: Board) {
+/// Places a piece on the board during the positioning phase
+/// Before the placement, checks if:
+/// - The target square is occupied
+/// - The placement is in an invalid territory
+///
+/// ## Parameters
+///
+/// ## Returns
+///
+///
+pub fn place_piece(
+  game: Game,
+  target_coords: Coords,
+  target_piece: Piece,
+  source_coords: Option(Coords),
+) -> Result(Game, String) {
+  let target_square = retrieve_square(game.board, target_coords)
+  case is_placement_legal(target_piece, target_square) {
+    Error(reason) -> Error("Placement not legal because: " <> reason)
+    Ok(_) -> {
+      let updated_game =
+        execute_placement(game, source_coords, target_piece, target_square)
+
+      let positioning = is_positioning(game.board)
+      let remaining_moves = case positioning {
+        True -> 0
+        False -> 4
+      }
+
+      Ok(Game(..updated_game, positioning:, remaining_moves:))
+    }
+  }
+}
+
+/// Places a piece on the board
+///
+/// This function does not perform any check before placing the piece, just
+/// places the pieces at the given coordinates. This function is more intented
+/// to testing and debuggin propouses. For actual games, use the `place_piece`
+/// function instead as that functions validates the placements before execute
+/// it.
+///
+/// ## Returns
+///
+/// - `Game`:  The updated game state after placing the piece on the board
+pub fn execute_placement(
+  game: Game,
+  source_coords: Option(Coords),
+  target_piece: Piece,
+  target_square: Square,
+) -> Game {
+  let updated_squares = case source_coords {
+    Some(source_coords) -> {
+      let source_square = retrieve_square(game.board, source_coords)
+
+      [
+        Square(..target_square, piece: Some(target_piece)),
+        Square(..source_square, piece: None),
+      ]
+    }
+
+    None -> [Square(..target_square, piece: Some(target_piece))]
+  }
+
+  let board = update_board(game.board, updated_squares)
+
+  Game(..game, board: board)
+}
+
+/// Checks if a piece placement is legal
+pub fn is_placement_legal(
+  piece: Piece,
+  target_square: Square,
+) -> Result(Nil, String) {
+  use <- bool.guard(
+    target_square.piece != None,
+    Error("There is already a piece in the target square"),
+  )
+
+  case piece.color {
+    Gold -> {
+      use <- bool.guard(
+        !list.contains([1, 2], target_square.x),
+        Error("Attempeted to place a piece in a non-valid square"),
+      )
+      Ok(Nil)
+    }
+
+    Silver -> {
+      use <- bool.guard(
+        !list.contains([7, 8], target_square.x),
+        Error("Attempeted to place a piece in a non-valid square"),
+      )
+      Ok(Nil)
+    }
+  }
+}
+
+/// Returns a list of pieces that can still be placed during setup
+pub fn get_aviable_pieces_to_place(board: Board) -> List(Piece) {
+  let pieces =
+    list.flat_map([Gold, Silver], fn(color) {
+      list.flat_map([Elephant, Camel, Horse, Dog, Cat, Rabbit], fn(kind) {
+        let piece_ids = case
+          list.find(pieces_amount_per_player, fn(p) { p.0 == kind })
+        {
+          Ok(#(_, amount)) -> amount
+          Error(_) -> 0
+        }
+
+        list.map(list.range(1, piece_ids), fn(id) { Piece(kind, color, id) })
+      })
+    })
+
+  let position_squares =
+    list.filter(board, fn(square) {
+      square.x == 1 || square.x == 2 || square.x == 7 || square.x == 8
+    })
+
+  pieces
+  |> list.filter(fn(piece) {
+    list.all(position_squares, fn(square) { square.piece != Some(piece) })
+  })
+  |> list.reverse()
+}
+
+/// Checks if the game is still in the positioning phase
+pub fn is_positioning(board: Board) -> Bool {
+  let position_squares =
+    list.filter(board, fn(square) {
+      square.x == 1 || square.x == 2 || square.x == 7 || square.x == 8
+    })
+
+  list.any(position_squares, fn(square) { square.piece == None })
+}
+
+/// Removes pieces on trap squares with no adjacent friendly pieces
+pub fn perform_captures(game: Game) -> Game {
+  let board =
+    list.map(game.board, fn(square) {
+      let coords = #(square.x, square.y)
+
+      case square.piece, list.contains(trap_squares, coords) {
+        None, _ -> square
+        Some(_), False -> square
+        Some(piece), True -> {
+          let adjacent_ally_pieces =
+            adjacent_pieces(game.board, coords)
+            |> list.filter(fn(p) { p.color == piece.color })
+
+          case list.is_empty(adjacent_ally_pieces) {
+            True -> Square(..square, piece: None)
+            False -> square
+          }
+        }
+      }
+    })
+
+  Game(..game, board: board)
+}
+
+/// Checks if either player has won the game and updates the game state accordingly.
+///
+/// Supported win conditions:
+///
+/// - A rabbit has reached its opposite end of the board
+/// - All pieces from one player has beencaptured
+///
+/// ## Returns
+///
+/// - `Game`: The updated game state after checking for a win
+pub fn check_win(game: Game) -> Game {
+  Game(
+    ..game,
+    win: player_has_all_pieces_captured(game.board)
+      || is_rabbit_reached_opposite_end(game.board),
+  )
+}
+
+fn is_rabbit_reached_opposite_end(board: Board) {
   board
   |> list.filter(fn(square) { list.contains([1, 8], square.x) })
   |> list.any(fn(square) {
@@ -694,4 +687,70 @@ fn player_has_all_pieces_captured(board: Board) {
   }
 
   list.is_empty(gold_pieces) || list.is_empty(silver_pieces)
+}
+
+/// Finds a square at the given coordinates
+pub fn retrieve_square(board: Board, coords: Coords) -> Square {
+  let assert Ok(square) =
+    list.find(board, fn(square) {
+      let #(x, y) = coords
+      square.x == x && square.y == y
+    })
+
+  square
+}
+
+/// Finds the square containing the given piece
+pub fn retrieve_square_from_piece(board: Board, piece: Piece) -> Square {
+  let assert Ok(square) =
+    list.find(board, fn(square) { square.piece == Some(piece) })
+
+  square
+}
+
+/// For a given coordinate, returns the list of all
+/// adyacent coordinates in the board
+pub fn adjacent_coords(coords: Coords) -> List(Coords) {
+  let #(x, y) = coords
+  let possible = [#(x + 1, y), #(x - 1, y), #(x, y + 1), #(x, y - 1)]
+
+  list.filter(possible, fn(coord) {
+    let #(x, y) = coord
+    x >= 1 && x <= 8 && y >= 1 && y <= 8
+  })
+}
+
+/// Returns a list of pieces in adjacent squares
+pub fn adjacent_pieces(board: Board, coords: Coords) -> List(Piece) {
+  coords
+  |> adjacent_coords()
+  |> list.filter_map(fn(a_coords) {
+    let assert Ok(square) =
+      list.find(board, fn(s) { s.x == a_coords.0 && s.y == a_coords.1 })
+
+    case square.piece {
+      Some(piece) -> Ok(piece)
+      None -> Error("No piece found in the adjacent square")
+    }
+  })
+}
+
+/// Converts a piece color to its string representation
+pub fn piece_color_to_string(piece_color: PieceColor) {
+  case piece_color {
+    Gold -> "gold"
+    Silver -> "silver"
+  }
+}
+
+/// Converts a piece kind to its string representation
+pub fn piece_kind_to_string(piece_kind: PieceKind) {
+  case piece_kind {
+    Elephant -> "elephant"
+    Camel -> "camel"
+    Horse -> "horse"
+    Dog -> "dog"
+    Cat -> "cat"
+    Rabbit -> "rabbit"
+  }
 }
