@@ -75,6 +75,23 @@ pub fn move_piece_rabbit_backwards_test() {
   should.be_error(silver_result)
 }
 
+pub fn move_piece_invalid_no_net_board_change_test() {
+  let rabbit = Piece(Rabbit, Gold, 1)
+
+  let game = Game(..setup_test_game([#(rabbit, #(2, 2))]), remaining_moves: 0)
+  let updated_game = game_engine.pass_turn(game)
+
+  let assert Ok(updated_game) =
+    game_engine.move_piece(updated_game, rabbit, #(2, 3))
+  let assert Ok(updated_game) =
+    game_engine.move_piece(updated_game, rabbit, #(2, 2))
+  let assert Ok(updated_game) =
+    game_engine.move_piece(updated_game, rabbit, #(2, 3))
+  let updated_game = game_engine.move_piece(updated_game, rabbit, #(2, 2))
+
+  should.be_error(updated_game)
+}
+
 pub fn reposition_piece_valid_push_test() {
   let elephant = Piece(Elephant, Gold, 1)
   let rabbit = Piece(Rabbit, Silver, 1)
@@ -132,6 +149,27 @@ pub fn reposition_piece_invalid_weaker_piece_test() {
 
   let result = game_engine.reposition_piece(game, rabbit, elephant, #(4, 6))
   should.be_error(result)
+}
+
+pub fn reposition_piece_invalid_net_test() {
+  let elephant = Piece(Elephant, Gold, 1)
+  let rabbit = Piece(Rabbit, Silver, 1)
+
+  let game =
+    Game(
+      ..setup_test_game([#(elephant, #(4, 4)), #(rabbit, #(4, 5))]),
+      remaining_moves: 0,
+    )
+
+  let updated_game = game_engine.pass_turn(game)
+
+  let assert Ok(updated_game) =
+    game_engine.reposition_piece(updated_game, elephant, rabbit, #(4, 6))
+
+  let updated_game =
+    game_engine.reposition_piece(updated_game, elephant, rabbit, #(4, 4))
+
+  should.be_error(updated_game)
 }
 
 pub fn place_piece_valid_placement_test() {
