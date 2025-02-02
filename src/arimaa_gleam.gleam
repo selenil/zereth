@@ -312,18 +312,7 @@ fn move_piece(
 ) -> Model {
   case game_engine.move_piece(model.game, piece, delta_coords) {
     Ok(game) -> {
-      let game =
-        game
-        |> game_engine.perform_captures()
-        |> game_engine.pass_turn()
-        |> game_engine.check_win()
-
-      Model(
-        game: game,
-        error: None,
-        opting_piece: None,
-        enemy_opting_piece: None,
-      )
+      Model(game:, error: None, opting_piece: None, enemy_opting_piece: None)
     }
     Error(error) ->
       Model(
@@ -350,18 +339,7 @@ fn reposition_piece(
     )
   {
     Ok(game) -> {
-      let game =
-        game
-        |> game_engine.perform_captures()
-        |> game_engine.pass_turn()
-        |> game_engine.check_win()
-
-      Model(
-        game: game,
-        error: None,
-        opting_piece: None,
-        enemy_opting_piece: None,
-      )
+      Model(game:, error: None, opting_piece: None, enemy_opting_piece: None)
     }
     Error(error) ->
       Model(

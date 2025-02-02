@@ -240,7 +240,10 @@ pub fn move_piece(
             )),
             ..game.history
           ],
-        ),
+        )
+        |> perform_captures()
+        |> pass_turn()
+        |> check_win(),
       )
     }
     Error(reason) -> Error("Not a valid move because: " <> reason)
@@ -511,7 +514,10 @@ fn execute_reposition(
                 ),
                 ..game.history
               ],
-            ),
+            )
+            |> perform_captures()
+            |> pass_turn()
+            |> check_win(),
           )
         }
 
