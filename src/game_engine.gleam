@@ -201,7 +201,7 @@ pub fn pass_turn(game: Game) -> Game {
 ///
 /// - `game`: The current state of the game.
 /// - `piece`: The piece to be moved.
-/// - `delta_coords`: The change in coordinates for the move.
+/// - `target_coords`: The change in coordinates for the move.
 ///
 /// ## Returns
 ///
@@ -226,21 +226,21 @@ pub fn move_piece(
       use <- bool.guard(
         game.remaining_moves == 1
           && !check_if_board_changed(game, updated_board),
-        Error("Invalid move. A turn has to produce a nate change in the board"),
+        Error("Invalid move. A turn has to produce a net change in the board"),
       )
+
+      let new_history_record =
+        Move(#(source_square.x, source_square.y), #(
+          target_square.x,
+          target_square.y,
+        ))
 
       Ok(
         Game(
           ..game,
           board: updated_board,
           remaining_moves: game.remaining_moves - 1,
-          history: [
-            Move(#(source_square.x, source_square.y), #(
-              target_square.x,
-              target_square.y,
-            )),
-            ..game.history
-          ],
+          history: [new_history_record, ..game.history],
         )
         |> perform_captures()
         |> pass_turn()
@@ -297,7 +297,8 @@ fn check_if_board_changed(game: Game, updated_board: Board) {
 ///
 /// ## Returns
 ///
-///
+/// - `Ok(Nil)`: The movement is legal.
+/// - `Error(String)`: An error message if the movement is invalid.
 pub fn is_movement_legal(
   source_square: Square,
   target_square: Square,
@@ -411,7 +412,7 @@ pub fn reposition_piece(
   let target_square = retrieve_square(game.board, target_coords)
 
   // if the stronger piece wants to move to an adjacent square
-  // then the reposition is a pull, otherwise is a push
+  // the reposition is a pull, otherwise is a push
   let reposition_type = case
     list.contains(strong_piece_adjacent_coords, target_coords)
   {
@@ -419,15 +420,47 @@ pub fn reposition_piece(
     False -> Push
   }
 
-  execute_reposition(
-    game,
-    strong_piece,
-    strong_piece_square,
-    weak_piece,
-    weak_piece_square,
-    target_square,
-    reposition_type,
-  )
+  let updated_board =
+    execute_reposition(
+      game,
+      strong_piece,
+      strong_piece_square,
+      weak_piece,
+      weak_piece_square,
+      target_square,
+      reposition_type,
+    )
+
+  case updated_board {
+    Ok(updated_board) -> {
+      use <- bool.guard(
+        game.remaining_moves == 2
+          && !check_if_board_changed(game, updated_board),
+        Error("Invalid move. A turn has to produce a net change in the board"),
+      )
+
+      let new_history_record =
+        Reposition(
+          #(strong_piece_square.x, strong_piece_square.y),
+          #(weak_piece_square.x, weak_piece_square.y),
+          #(target_square.x, target_square.y),
+          reposition_type,
+        )
+
+      Ok(
+        Game(
+          ..game,
+          board: updated_board,
+          remaining_moves: game.remaining_moves - 2,
+          history: [new_history_record, ..game.history],
+        )
+        |> perform_captures()
+        |> pass_turn()
+        |> check_win(),
+      )
+    }
+    Error(reason) -> Error(reason)
+  }
 }
 
 fn execute_reposition(
@@ -486,39 +519,12 @@ fn execute_reposition(
             )
           }
 
-          let updated_board =
+          Ok(
             update_board(game.board, [
               weak_piece_square,
               target_square,
               strong_piece_square,
-            ])
-
-          use <- bool.guard(
-            game.remaining_moves == 2
-              && !check_if_board_changed(game, updated_board),
-            Error(
-              "Invalid move. A turn has to produce a nate change in the board",
-            ),
-          )
-
-          Ok(
-            Game(
-              ..game,
-              board: updated_board,
-              remaining_moves: game.remaining_moves - 2,
-              history: [
-                Reposition(
-                  #(strong_piece_square.x, strong_piece_square.y),
-                  #(weak_piece_square.x, weak_piece_square.y),
-                  #(target_square.x, target_square.y),
-                  reposition_type,
-                ),
-                ..game.history
-              ],
-            )
-            |> perform_captures()
-            |> pass_turn()
-            |> check_win(),
+            ]),
           )
         }
 
