@@ -561,9 +561,15 @@ pub fn is_piece_stronger(piece1: Piece, piece2: Piece) -> Bool {
 ///
 /// ## Parameters
 ///
+/// - `game`: The current state of the game.
+/// - `target_coords`: The coordinates of the target square.
+/// - `target_piece`: The piece to be placed on the board.
+/// - `source_coords`: The coordinates of the source square.
+///
 /// ## Returns
 ///
-///
+/// - `Ok(Game)`: The updated game state after placing the piece on the board.
+/// - `Error(String)`: An error message if the placement is invalid.
 pub fn place_piece(
   game: Game,
   target_coords: Coords,
@@ -593,7 +599,7 @@ pub fn place_piece(
 /// This function does not perform any check before placing the piece, just
 /// places the pieces at the given coordinates. This function is more intented
 /// to testing and debuggin propouses. For actual games, use the `place_piece`
-/// function instead as that functions validates the placements before execute
+/// function instead as that function validates the placements before execute
 /// it.
 ///
 /// ## Returns
@@ -620,7 +626,7 @@ pub fn execute_placement(
 
   let board = update_board(game.board, updated_squares)
 
-  Game(..game, board: board)
+  Game(..game, board:)
 }
 
 /// Checks if a piece placement is legal
@@ -654,18 +660,24 @@ pub fn is_placement_legal(
 
 /// Returns a list of pieces that can still be placed during setup
 pub fn get_aviable_pieces_to_place(board: Board) -> List(Piece) {
-  let pieces =
-    list.flat_map([Gold, Silver], fn(color) {
-      list.flat_map([Elephant, Camel, Horse, Dog, Cat, Rabbit], fn(kind) {
-        let piece_ids = case
-          list.find(pieces_amount_per_player, fn(p) { p.0 == kind })
-        {
-          Ok(#(_, amount)) -> amount
-          Error(_) -> 0
-        }
+  let colors = [Gold, Silver]
+  let piece_types = [Elephant, Camel, Horse, Dog, Cat, Rabbit]
 
-        list.map(list.range(1, piece_ids), fn(id) { Piece(kind, color, id) })
-      })
+  let get_piece_amount = fn(kind) {
+    case list.find(pieces_amount_per_player, fn(p) { p.0 == kind }) {
+      Ok(#(_, amount)) -> amount
+      Error(_) -> 0
+    }
+  }
+
+  let get_pieces = fn(color, kind) {
+    let piece_ids = get_piece_amount(kind)
+    list.map(list.range(1, piece_ids), fn(id) { Piece(kind, color, id) })
+  }
+
+  let pieces =
+    list.flat_map(colors, fn(color) {
+      list.flat_map(piece_types, fn(kind) { get_pieces(color, kind) })
     })
 
   let position_squares =
@@ -690,6 +702,24 @@ pub fn is_positioning(board: Board) -> Bool {
   list.any(position_squares, fn(square) { square.piece == None })
 }
 
+/// Undoes the last move made in the game by reverting the board state and updating the remaining moves.
+///
+/// This function handles undoing different types of moves:
+///
+/// - Regular moves: Returns the moved piece to its original square
+/// - Repositions (pushes/pulls): Returns both pieces to their original squares
+/// - Captures: First restores the captured piece, then undoes the move that led to the capture
+///
+/// ## Parameters
+///
+/// - `game`: The current state of the game
+///
+/// ## Returns
+///
+/// - `Game`: The updated game state after undoing the last move, with:
+///   - Board state reverted to before the move
+///   - Remaining moves increased appropriately
+///   - History updated to reflect the undone move
 pub fn undo_last_move(game: Game) -> Game {
   let assert [last_move, ..history] = game.history
 
@@ -768,6 +798,10 @@ pub fn undo_last_move(game: Game) -> Game {
 }
 
 /// Removes pieces on trap squares with no adjacent friendly pieces
+///
+/// ## Returns
+///
+/// - `Game`: The updated game state after performing captures
 pub fn perform_captures(game: Game) -> Game {
   let #(updated_squares, new_history_records) = {
     use acc, trap_coords <- list.fold(trap_squares, #([], []))
@@ -775,20 +809,21 @@ pub fn perform_captures(game: Game) -> Game {
     let trap_square = retrieve_square(game.board, trap_coords)
 
     case trap_square.piece {
+      None -> acc
       Some(piece) -> {
-        let adjacent_ally_pieces =
+        let has_adjacent_allies =
           adjacent_pieces(game.board, trap_coords)
-          |> list.filter(fn(p) { p.color == piece.color })
+          |> list.any(fn(p) { p.color == piece.color })
 
-        case list.is_empty(adjacent_ally_pieces) {
-          True -> #([Square(..trap_square, piece: None), ..acc.0], [
-            Capture(piece, trap_coords),
-            ..acc.1
-          ])
-          False -> acc
+        case has_adjacent_allies {
+          True -> acc
+          False -> {
+            let updated_squares = [Square(..trap_square, piece: None), ..acc.0]
+            let updated_history = [Capture(piece, trap_coords), ..acc.1]
+            #(updated_squares, updated_history)
+          }
         }
       }
-      None -> acc
     }
   }
 
@@ -812,11 +847,14 @@ pub fn perform_captures(game: Game) -> Game {
 ///
 /// - `Game`: The updated game state after checking for a win
 pub fn check_win(game: Game) -> Game {
-  Game(
-    ..game,
-    win: player_has_all_pieces_captured(game.board)
-      || is_rabbit_reached_opposite_end(game.board),
-  )
+  let win_conditions = [
+    is_rabbit_reached_opposite_end,
+    player_has_all_pieces_captured,
+  ]
+
+  let win = list.any(win_conditions, fn(condition) { condition(game.board) })
+
+  Game(..game, win:)
 }
 
 fn is_rabbit_reached_opposite_end(board: Board) {
