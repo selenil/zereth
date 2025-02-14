@@ -148,6 +148,28 @@
   filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.3)) brightness(1.1);
 }
 
+.piece:active {
+  cursor: pointer;
+  transform: scale(1.05);
+}
+
+.piece.ghost {
+  filter: opacity(0.4);
+  transform: scale(0.95);
+  pointer-events: none;
+  cursor: default;
+}
+
+.piece.opting {
+  transform: scale(1.1);
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.3)) brightness(1.1);
+}
+
+.piece.enemy-opting {
+  transform: scale(1.1);
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.3)) brightness(1.1);
+}
+
 /* Selected piece styling */
 .square.opting {
   box-shadow: inset 0 0 0 3px #27ae60;

@@ -18,6 +18,7 @@ pub type Model {
     enemy_opting_piece: Option(game_engine.Piece),
     valid_coords: Option(List(game_engine.Coords)),
     error: Option(String),
+    ghost_piece: Option(#(game_engine.Piece, game_engine.Square)),
   )
 }
 
@@ -28,12 +29,14 @@ fn init(_flags) -> Model {
     enemy_opting_piece: None,
     valid_coords: None,
     error: None,
+    ghost_piece: None,
   )
 }
 
 pub opaque type Msg {
   Opting(piece: game_engine.Piece)
   EnemyOpting(piece: game_engine.Piece)
+  SquareOpting(square: game_engine.Square)
   PlacePiece(target_square: game_engine.Square)
   MovePiece(target_square: game_engine.Square)
   RepositionPiece(target_square: game_engine.Square)
@@ -83,6 +86,23 @@ pub fn update(model: Model, msg: Msg) -> Model {
       }
 
       Model(..model, enemy_opting_piece:, error: None)
+    }
+
+    SquareOpting(square) -> {
+      case model.valid_coords {
+        Some(coords) -> {
+          case
+            model.opting_piece,
+            list.contains(coords, #(square.x, square.y))
+          {
+            Some(piece), True -> {
+              Model(..model, ghost_piece: Some(#(piece, square)))
+            }
+            _, _ -> Model(..model, ghost_piece: None)
+          }
+        }
+        None -> Model(..model, ghost_piece: None)
+      }
     }
 
     PlacePiece(target_square) -> {
@@ -264,30 +284,57 @@ fn render_square(
   square: game_engine.Square,
   model: Model,
 ) -> element.Element(Msg) {
-  let piece_element = case square.piece {
-    Some(piece) -> {
-      let asset_name = get_piece_asset_name(piece)
-
-      html.div([attribute.class("piece")], [
-        html.img([attribute.src(asset_name), attribute.alt("Piece")]),
-      ])
-    }
-    None -> html.div([], [])
+  let ghost_piece = case model.ghost_piece {
+    Some(#(ghost_piece, ghost_square)) if ghost_square == square ->
+      Some(ghost_piece)
+    _ -> None
   }
 
-  let piece_event = case square.piece, model.game.current_player_color {
-    Some(piece), color if piece.color == color -> event.on_click(Opting(piece))
+  let piece_element = case ghost_piece, square.piece {
+    Some(ghost_piece), _ -> {
+      let asset_name = get_piece_asset_name(ghost_piece)
+      html.div([attribute.class("piece"), attribute.class("ghost")], [
+        html.img([attribute.src(asset_name), attribute.alt("Ghost Piece")]),
+      ])
+    }
 
-    Some(piece), _ -> event.on_click(EnemyOpting(piece))
-    None, _ ->
-      event.on_click(case model.game.positioning {
+    None, Some(piece) -> {
+      let asset_name = get_piece_asset_name(piece)
+      html.div(
+        [
+          attribute.class("piece"),
+          case model.opting_piece, model.enemy_opting_piece {
+            Some(p), _ if p == piece -> attribute.class("opting")
+            _, Some(p) if p == piece -> attribute.class("enemy-opting")
+            _, _ -> attribute.none()
+          },
+        ],
+        [html.img([attribute.src(asset_name), attribute.alt("Piece")])],
+      )
+    }
+
+    _, _ -> html.div([], [])
+  }
+
+  let piece_events = case square.piece, model.game.current_player_color {
+    Some(piece), color if piece.color == color -> [
+      event.on_click(Opting(piece)),
+    ]
+
+    Some(piece), _ -> [event.on_click(EnemyOpting(piece))]
+
+    None, _ -> {
+      let message = case model.game.positioning {
         True -> PlacePiece(square)
         False ->
           case model.opting_piece, model.enemy_opting_piece {
             Some(_), Some(_) -> RepositionPiece(square)
             _, _ -> MovePiece(square)
           }
-      })
+      }
+
+      [event.on_click(message)]
+    }
   }
 
   let square_id = case square.piece {
@@ -298,24 +345,23 @@ fn render_square(
   let valid_coords_class = case model.valid_coords {
     Some(coords) ->
       case list.any(coords, fn(c) { c.0 == square.x && c.1 == square.y }) {
-        True -> "valid"
-        False -> ""
+        True -> attribute.class("valid")
+        False -> attribute.none()
       }
-    None -> ""
+    None -> attribute.none()
   }
 
   html.div(
     [
       attribute.id(square_id),
       attribute.class("square"),
-      attribute.class(case
-        list.contains(game_engine.trap_squares, #(square.x, square.y))
-      {
-        True -> "trap"
-        False -> ""
-      }),
-      attribute.class(valid_coords_class),
-      piece_event,
+      case list.contains(game_engine.trap_squares, #(square.x, square.y)) {
+        True -> attribute.class("trap")
+        False -> attribute.none()
+      },
+      valid_coords_class,
+      event.on_mouse_over(SquareOpting(square)),
+      ..piece_events
     ],
     [piece_element],
   )
@@ -355,24 +401,10 @@ fn move_piece(
   target_coords: game_engine.Coords,
 ) -> Model {
   case game_engine.move_piece(model.game, piece, target_coords) {
-    Ok(game) -> {
-      Model(
-        game:,
-        error: None,
-        opting_piece: None,
-        enemy_opting_piece: None,
-        valid_coords: None,
-      )
-    }
+    Ok(game) -> set_game(model, game)
     Error(error) -> {
       logger.print_move_error(error, piece, target_coords)
-      Model(
-        ..model,
-        error: Some(error),
-        opting_piece: None,
-        enemy_opting_piece: None,
-        valid_coords: None,
-      )
+      set_error(model, error)
     }
   }
 }
@@ -391,15 +423,8 @@ fn reposition_piece(
       target_coords,
     )
   {
-    Ok(game) -> {
-      Model(
-        game:,
-        error: None,
-        opting_piece: None,
-        enemy_opting_piece: None,
-        valid_coords: None,
-      )
-    }
+    Ok(game) -> set_game(model, game)
+
     Error(error) -> {
       logger.print_reposition_error(
         error,
@@ -407,15 +432,31 @@ fn reposition_piece(
         weak_piece,
         target_coords,
       )
-      Model(
-        ..model,
-        error: Some(error),
-        opting_piece: None,
-        enemy_opting_piece: None,
-        valid_coords: None,
-      )
+      set_error(model, error)
     }
   }
+}
+
+fn set_game(_model: Model, game: game_engine.Game) -> Model {
+  Model(
+    game:,
+    opting_piece: None,
+    enemy_opting_piece: None,
+    valid_coords: None,
+    error: None,
+    ghost_piece: None,
+  )
+}
+
+fn set_error(model: Model, error: String) -> Model {
+  Model(
+    ..model,
+    error: Some(error),
+    opting_piece: None,
+    enemy_opting_piece: None,
+    valid_coords: None,
+    ghost_piece: None,
+  )
 }
 
 fn could_undo(game: game_engine.Game) -> Bool {
