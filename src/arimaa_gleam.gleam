@@ -9,12 +9,14 @@ import lustre/element/html
 import lustre/event
 
 import game_engine
+import logger
 
 pub type Model {
   Model(
     game: game_engine.Game,
     opting_piece: Option(game_engine.Piece),
     enemy_opting_piece: Option(game_engine.Piece),
+    valid_coords: Option(List(game_engine.Coords)),
     error: Option(String),
   )
 }
@@ -24,6 +26,7 @@ fn init(_flags) -> Model {
     game: game_engine.new_debug_game(),
     opting_piece: None,
     enemy_opting_piece: None,
+    valid_coords: None,
     error: None,
   )
 }
@@ -51,7 +54,23 @@ pub fn update(model: Model, msg: Msg) -> Model {
         _ -> Some(piece)
       }
 
-      Model(..model, opting_piece:, error: None)
+      let valid_coords = case opting_piece {
+        Some(p) -> {
+          let source_square =
+            game_engine.retrieve_square_from_piece(model.game.board, p)
+
+          Some(
+            game_engine.valid_coords_for_piece(
+              model.game.board,
+              model.game.remaining_moves,
+              #(source_square.x, source_square.y),
+            ),
+          )
+        }
+        _ -> None
+      }
+
+      Model(..model, opting_piece:, valid_coords:, error: None)
     }
 
     EnemyOpting(piece) -> {
@@ -261,6 +280,15 @@ fn render_square(
     None -> build_square_id(square)
   }
 
+  let valid_coords_class = case model.valid_coords {
+    Some(coords) ->
+      case list.any(coords, fn(c) { c.0 == square.x && c.1 == square.y }) {
+        True -> "valid"
+        False -> ""
+      }
+    None -> ""
+  }
+
   html.div(
     [
       attribute.id(square_id),
@@ -271,6 +299,7 @@ fn render_square(
         True -> "trap"
         False -> ""
       }),
+      attribute.class(valid_coords_class),
       piece_event,
     ],
     [piece_element],
@@ -308,19 +337,27 @@ fn place_piece(
 fn move_piece(
   model: Model,
   piece: game_engine.Piece,
-  delta_coords: game_engine.Coords,
+  target_coords: game_engine.Coords,
 ) -> Model {
-  case game_engine.move_piece(model.game, piece, delta_coords) {
+  case game_engine.move_piece(model.game, piece, target_coords) {
     Ok(game) -> {
-      Model(game:, error: None, opting_piece: None, enemy_opting_piece: None)
+      Model(
+        game:,
+        error: None,
+        opting_piece: None,
+        enemy_opting_piece: None,
+        valid_coords: None,
+      )
     }
-    Error(error) ->
+    Error(error) -> {
+      logger.print_move_error(error, piece, target_coords)
       Model(
         ..model,
         error: Some(error),
         opting_piece: None,
         enemy_opting_piece: None,
       )
+    }
   }
 }
 
@@ -328,26 +365,39 @@ fn reposition_piece(
   model: Model,
   strong_piece: game_engine.Piece,
   weak_piece: game_engine.Piece,
-  target_square: game_engine.Coords,
+  target_coords: game_engine.Coords,
 ) -> Model {
   case
     game_engine.reposition_piece(
       model.game,
       strong_piece,
       weak_piece,
-      target_square,
+      target_coords,
     )
   {
     Ok(game) -> {
-      Model(game:, error: None, opting_piece: None, enemy_opting_piece: None)
+      Model(
+        game:,
+        error: None,
+        opting_piece: None,
+        enemy_opting_piece: None,
+        valid_coords: None,
+      )
     }
-    Error(error) ->
+    Error(error) -> {
+      logger.print_reposition_error(
+        error,
+        strong_piece,
+        weak_piece,
+        target_coords,
+      )
       Model(
         ..model,
         error: Some(error),
         opting_piece: None,
         enemy_opting_piece: None,
       )
+    }
   }
 }
 
