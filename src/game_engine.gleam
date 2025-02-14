@@ -1,6 +1,8 @@
 import gleam/bool
+import gleam/int
 import gleam/list
 import gleam/option.{type Option, None, Some}
+import gleam/set.{type Set}
 
 /// Represents the current state of an Arimaa game
 pub type Game {
@@ -212,35 +214,55 @@ pub fn move_piece(
   piece: Piece,
   target_coords: Coords,
 ) -> Result(Game, String) {
-  use <- bool.guard(
-    game.remaining_moves < 1,
-    Error("No moves remaining in the current turn"),
-  )
-
   let source_square = retrieve_square_from_piece(game.board, piece)
   let target_square = retrieve_square(game.board, target_coords)
 
-  case validate_move(game.board, piece, source_square, target_square) {
+  case
+    validate_move(
+      game.board,
+      game.remaining_moves,
+      piece,
+      source_square,
+      target_square,
+    )
+  {
     Ok(_) -> {
+      let length = case source_square, target_square {
+        Square(x1, y1, _), Square(x2, y2, _) if x1 != x2 && y1 == y2 ->
+          int.absolute_value(x2 - x1)
+
+        Square(x1, y1, _), Square(x2, y2, _) if x1 == x2 && y1 != y2 ->
+          int.absolute_value(y2 - y1)
+
+        _, _ -> panic as "Invalid move. Not ortogonal"
+      }
+
+      use <- bool.guard(
+        game.remaining_moves < length,
+        Error("Not enough moves remaining"),
+      )
+
       let updated_board = execute_move(game.board, source_square, target_square)
       use <- bool.guard(
-        game.remaining_moves == 1
+        game.remaining_moves == length
           && !check_if_board_changed(game, updated_board),
         Error("Invalid move. A turn has to produce a net change in the board"),
       )
 
-      let new_history_record =
-        Move(#(source_square.x, source_square.y), #(
-          target_square.x,
-          target_square.y,
-        ))
+      let new_history_records =
+        generate_move_history_record(source_square, target_square)
+
+      let history =
+        list.fold(new_history_records, game.history, fn(acc, record) {
+          [record, ..acc]
+        })
 
       Ok(
         Game(
           ..game,
           board: updated_board,
-          remaining_moves: game.remaining_moves - 1,
-          history: [new_history_record, ..game.history],
+          remaining_moves: game.remaining_moves - length,
+          history:,
         )
         |> perform_captures()
         |> pass_turn()
@@ -260,17 +282,18 @@ fn execute_move(board: Board, source_square: Square, target_square: Square) {
 
 fn validate_move(
   board: Board,
+  remaining_moves: Int,
   piece: Piece,
   source_square: Square,
   target_square: Square,
 ) -> Result(Nil, String) {
   case
-    is_movement_legal(source_square, target_square),
+    is_movement_legal(board, remaining_moves, source_square, target_square),
     is_piece_frozen(board, piece, source_square),
     is_rabbit_moving_backwards(piece, source_square, target_square)
   {
     Ok(_), False, False -> Ok(Nil)
-    Error(reason), _, _ -> Error("Movement not legal because: " <> reason)
+    Error(reason), _, _ -> Error(reason)
     _, True, _ -> Error("Piece is frozen")
     _, _, True -> Error("Rabbits cannot move backwards")
   }
@@ -281,6 +304,36 @@ fn check_if_board_changed(game: Game, updated_board: Board) {
     Some(previous_board) -> previous_board != updated_board
     None -> True
   }
+}
+
+fn generate_move_history_record(source_square: Square, target_square: Square) {
+  let is_x_axis = case source_square, target_square {
+    Square(x1, _, _), Square(x2, _, _) if x1 == x2 -> True
+    Square(_, y1, _), Square(_, y2, _) if y1 == y2 -> False
+    _, _ -> panic as "Invalid move. Not ortogonal"
+  }
+
+  let coords = case source_square, target_square, is_x_axis {
+    Square(x1, y1, _), Square(_, y2, _), True ->
+      list.range(y1, y2)
+      |> list.drop(1)
+      |> list.map(fn(y) { #(x1, y) })
+
+    Square(x1, y1, _), Square(x2, _, _), False ->
+      list.range(x1, x2)
+      |> list.drop(1)
+      |> list.map(fn(x) { #(x, y1) })
+  }
+
+  list.fold(coords, [], fn(acc, coord) {
+    let recent = case list.first(acc) {
+      Ok(Move(_, target_coords)) -> target_coords
+      _ -> #(source_square.x, source_square.y)
+    }
+    let new = Move(recent, coord)
+    [new, ..acc]
+  })
+  |> list.reverse()
 }
 
 /// Checks if a movement between squares is legal according to the rules
@@ -300,6 +353,8 @@ fn check_if_board_changed(game: Game, updated_board: Board) {
 /// - `Ok(Nil)`: The movement is legal.
 /// - `Error(String)`: An error message if the movement is invalid.
 pub fn is_movement_legal(
+  board: Board,
+  remaining_moves: Int,
   source_square: Square,
   target_square: Square,
 ) -> Result(Nil, String) {
@@ -313,10 +368,14 @@ pub fn is_movement_legal(
     Error("Already a piece in the target square"),
   )
 
-  let adjacent_coords = adjacent_coords(#(source_square.x, source_square.y))
+  let valid_coords =
+    valid_coords_for_piece(board, remaining_moves, #(
+      source_square.x,
+      source_square.y,
+    ))
   use <- bool.guard(
-    !list.contains(adjacent_coords, #(target_square.x, target_square.y)),
-    Error("Not an adjacent square"),
+    !list.contains(valid_coords, #(target_square.x, target_square.y)),
+    Error("Not a valid square square"),
   )
 
   Ok(Nil)
@@ -477,7 +536,14 @@ fn execute_reposition(
     Push -> #(weak_piece_square, target_square)
   }
 
-  case is_movement_legal(first_movement_source, first_movement_target) {
+  case
+    is_movement_legal(
+      game.board,
+      game.remaining_moves,
+      first_movement_source,
+      first_movement_target,
+    )
+  {
     Ok(_) -> {
       let #(strong_piece_square, weak_piece_square, target_square) = case
         reposition_type
@@ -501,7 +567,14 @@ fn execute_reposition(
         Push -> #(strong_piece_square, weak_piece_square)
       }
 
-      case is_movement_legal(second_movement_source, second_movement_target) {
+      case
+        is_movement_legal(
+          game.board,
+          game.remaining_moves,
+          second_movement_source,
+          second_movement_target,
+        )
+      {
         Ok(_) -> {
           let #(strong_piece_square, weak_piece_square, target_square) = case
             reposition_type
@@ -928,6 +1001,18 @@ pub fn adjacent_pieces(board: Board, coords: Coords) -> List(Piece) {
   })
 }
 
+pub fn valid_coords_for_piece(
+  board: Board,
+  remaining_moves: Int,
+  source_coords: Coords,
+) -> List(Coords) {
+  let visited = set.new()
+
+  possible_moves(source_coords, remaining_moves, visited, board)
+  |> list.flatten()
+  |> list.filter(fn(pos) { is_ortogonal(source_coords, pos) })
+}
+
 /// Converts a piece color to its string representation
 pub fn piece_color_to_string(piece_color: PieceColor) {
   case piece_color {
@@ -946,4 +1031,41 @@ pub fn piece_kind_to_string(piece_kind: PieceKind) {
     Cat -> "cat"
     Rabbit -> "rabbit"
   }
+}
+
+fn possible_moves(
+  start: Coords,
+  remaining_moves: Int,
+  visited: Set(Coords),
+  board: Board,
+) -> List(List(Coords)) {
+  use <- bool.guard(remaining_moves == 0, [])
+
+  let directions = [#(0, 1), #(0, -1), #(1, 0), #(-1, 0)]
+  let next_positions =
+    directions
+    |> list.map(fn(dir) { #(start.0 + dir.0, start.1 + dir.1) })
+    |> list.filter(fn(pos) {
+      use <- bool.guard(set.contains(visited, pos), False)
+      use <- bool.guard(pos.0 < 1 || pos.0 > 8 || pos.1 < 1 || pos.1 > 8, False)
+      use <- bool.guard(retrieve_square(board, pos).piece != None, False)
+      True
+    })
+
+  let new_visited = set.insert(visited, start)
+
+  let further_positions =
+    next_positions
+    |> list.flat_map(fn(pos) {
+      possible_moves(pos, remaining_moves - 1, new_visited, board)
+    })
+
+  [next_positions, ..further_positions]
+}
+
+fn is_ortogonal(start: Coords, pos: Coords) -> Bool {
+  let #(x1, y1) = start
+  let #(x2, y2) = pos
+
+  x1 == x2 || y1 == y2
 }
