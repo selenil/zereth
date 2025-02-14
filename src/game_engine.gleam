@@ -265,7 +265,6 @@ pub fn move_piece(
           history:,
         )
         |> perform_captures()
-        |> pass_turn()
         |> check_win(),
       )
     }
@@ -514,7 +513,6 @@ pub fn reposition_piece(
           history: [new_history_record, ..game.history],
         )
         |> perform_captures()
-        |> pass_turn()
         |> check_win(),
       )
     }

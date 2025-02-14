@@ -38,6 +38,7 @@ pub opaque type Msg {
   MovePiece(target_square: game_engine.Square)
   RepositionPiece(target_square: game_engine.Square)
   Undo
+  PassTurn
 }
 
 pub fn update(model: Model, msg: Msg) -> Model {
@@ -46,6 +47,7 @@ pub fn update(model: Model, msg: Msg) -> Model {
 
   case msg {
     Undo -> Model(..model, game: game_engine.undo_last_move(model.game))
+    PassTurn -> Model(..model, game: game_engine.pass_turn(model.game))
 
     Opting(piece) -> {
       // deselect if the user touches the same piece twice
@@ -162,14 +164,6 @@ pub fn view(model: Model) -> element.Element(Msg) {
           html.text(
             " | Moves remaining: " <> int.to_string(model.game.remaining_moves),
           ),
-          case could_undo(model.game) {
-            True ->
-              html.button(
-                [attribute.class("undo-button"), event.on_click(Undo)],
-                [html.text("Undo")],
-              )
-            False -> html.text("")
-          },
         ]),
       ]),
       html.div(
@@ -241,7 +235,28 @@ pub fn view(model: Model) -> element.Element(Msg) {
         board_view,
       ])
     }
-    False -> board_view
+    False ->
+      html.div([], [
+        board_view,
+        html.div([attribute.class("player-controls")], [
+          html.button(
+            [
+              attribute.class("undo-button"),
+              attribute.disabled(!could_undo(model.game)),
+              event.on_click(Undo),
+            ],
+            [html.text("Undo")],
+          ),
+          html.button(
+            [
+              attribute.class("pass-turn-button"),
+              attribute.disabled(model.game.remaining_moves != 0),
+              event.on_click(PassTurn),
+            ],
+            [html.text("Pass turn")],
+          ),
+        ]),
+      ])
   }
 }
 
@@ -356,6 +371,7 @@ fn move_piece(
         error: Some(error),
         opting_piece: None,
         enemy_opting_piece: None,
+        valid_coords: None,
       )
     }
   }
@@ -396,6 +412,7 @@ fn reposition_piece(
         error: Some(error),
         opting_piece: None,
         enemy_opting_piece: None,
+        valid_coords: None,
       )
     }
   }
