@@ -250,7 +250,7 @@ pub fn move_piece(
       )
 
       let new_history_records =
-        generate_move_history_record(source_square, target_square)
+        generate_move_history_records(source_square, target_square)
 
       let history =
         list.fold(new_history_records, game.history, fn(acc, record) {
@@ -306,7 +306,7 @@ fn check_if_board_changed(game: Game, updated_board: Board) {
   }
 }
 
-fn generate_move_history_record(source_square: Square, target_square: Square) {
+fn generate_move_history_records(source_square: Square, target_square: Square) {
   let is_x_axis = case source_square, target_square {
     Square(x1, _, _), Square(x2, _, _) if x1 == x2 -> True
     Square(_, y1, _), Square(_, y2, _) if y1 == y2 -> False
@@ -536,14 +536,7 @@ fn execute_reposition(
     Push -> #(weak_piece_square, target_square)
   }
 
-  case
-    is_movement_legal(
-      game.board,
-      game.remaining_moves,
-      first_movement_source,
-      first_movement_target,
-    )
-  {
+  case is_reposition_legal(first_movement_source, first_movement_target) {
     Ok(_) -> {
       let #(strong_piece_square, weak_piece_square, target_square) = case
         reposition_type
@@ -567,14 +560,7 @@ fn execute_reposition(
         Push -> #(strong_piece_square, weak_piece_square)
       }
 
-      case
-        is_movement_legal(
-          game.board,
-          game.remaining_moves,
-          second_movement_source,
-          second_movement_target,
-        )
-      {
+      case is_reposition_legal(second_movement_source, second_movement_target) {
         Ok(_) -> {
           let #(strong_piece_square, weak_piece_square, target_square) = case
             reposition_type
@@ -606,6 +592,29 @@ fn execute_reposition(
     }
     Error(reason) -> Error(reason)
   }
+}
+
+fn is_reposition_legal(
+  source_square: Square,
+  target_square: Square,
+) -> Result(Nil, String) {
+  use <- bool.guard(
+    source_square.piece == None,
+    Error("Not a piece in the source square"),
+  )
+
+  use <- bool.guard(
+    target_square.piece != None,
+    Error("Already a piece in the target square"),
+  )
+
+  let adjacent_coords = adjacent_coords(#(source_square.x, source_square.y))
+  use <- bool.guard(
+    !list.contains(adjacent_coords, #(target_square.x, target_square.y)),
+    Error("Not an adyacent square"),
+  )
+
+  Ok(Nil)
 }
 
 /// Checks if `piece1` is stronger than `piece2`
@@ -1001,6 +1010,13 @@ pub fn adjacent_pieces(board: Board, coords: Coords) -> List(Piece) {
   })
 }
 
+/// Returns a list of valid coordinates that a piece can move to from the given source coordinates.
+///
+/// ## Parameters
+///
+/// - `board`: The current game board state
+/// - `remaining_moves`: Number of moves remaining in the current turn
+/// - `source_coords`: Starting coordinates of the piece
 pub fn valid_coords_for_piece(
   board: Board,
   remaining_moves: Int,
