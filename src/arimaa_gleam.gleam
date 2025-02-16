@@ -19,7 +19,7 @@ pub type Model {
     enemy_opting_piece: Option(game_engine.Piece),
     valid_coords: Option(List(game_engine.Coords)),
     error: Option(String),
-    ghost_piece: Option(#(game_engine.Piece, game_engine.Square)),
+    opting_square: Option(game_engine.Square),
   )
 }
 
@@ -30,7 +30,7 @@ fn init(_flags) -> Model {
     enemy_opting_piece: None,
     valid_coords: None,
     error: None,
-    ghost_piece: None,
+    opting_square: None,
   )
 }
 
@@ -92,17 +92,14 @@ pub fn update(model: Model, msg: Msg) -> Model {
     SquareOpting(square) -> {
       case model.valid_coords {
         Some(coords) -> {
-          case
-            model.opting_piece,
-            list.contains(coords, #(square.x, square.y))
-          {
-            Some(piece), True -> {
-              Model(..model, ghost_piece: Some(#(piece, square)))
+          case list.contains(coords, #(square.x, square.y)) {
+            True -> {
+              Model(..model, opting_square: Some(square))
             }
-            _, _ -> Model(..model, ghost_piece: None)
+            _ -> Model(..model, opting_square: None)
           }
         }
-        None -> Model(..model, ghost_piece: None)
+        None -> Model(..model, opting_square: None)
       }
     }
 
@@ -285,21 +282,19 @@ fn render_square(
   square: game_engine.Square,
   model: Model,
 ) -> element.Element(Msg) {
-  let ghost_piece = case model.ghost_piece {
-    Some(#(ghost_piece, ghost_square)) if ghost_square == square ->
-      Some(ghost_piece)
-    _ -> None
-  }
-
-  let piece_element = case ghost_piece, square.piece {
-    Some(ghost_piece), _ -> {
-      let asset_name = get_piece_asset_name(ghost_piece)
+  let piece_element = case
+    model.opting_square,
+    model.opting_piece,
+    square.piece
+  {
+    Some(opting_square), Some(opting_piece), None if opting_square == square -> {
+      let asset_name = get_piece_asset_name(opting_piece)
       html.div([attribute.class("piece"), attribute.class("ghost")], [
         html.img([attribute.src(asset_name), attribute.alt("Ghost Piece")]),
       ])
     }
 
-    None, Some(piece) -> {
+    _, _, Some(piece) -> {
       let asset_name = get_piece_asset_name(piece)
       html.div(
         [
@@ -315,7 +310,7 @@ fn render_square(
       )
     }
 
-    _, _ -> html.div([], [])
+    _, _, _ -> html.div([], [])
   }
 
   let piece_events = case square.piece, model.game.current_player_color {
@@ -465,7 +460,7 @@ fn set_game(_model: Model, game: game_engine.Game) -> Model {
     enemy_opting_piece: None,
     valid_coords: None,
     error: None,
-    ghost_piece: None,
+    opting_square: None,
   )
 }
 
@@ -476,7 +471,7 @@ fn set_error(model: Model, error: String) -> Model {
     opting_piece: None,
     enemy_opting_piece: None,
     valid_coords: None,
-    ghost_piece: None,
+    opting_square: None,
   )
 }
 
@@ -508,7 +503,8 @@ fn get_piece_asset_name(piece: game_engine.Piece) {
 }
 
 fn on_dragstart(msg) {
-  use _ <- event.on("dragstart")
+  use evt <- event.on("dragstart")
+  hide_piece_image(evt)
   Ok(msg)
 }
 
@@ -530,5 +526,10 @@ fn on_drop(msg) {
 
 @external(javascript, "./browser_ffi.mjs", "preventDefault")
 fn prevent_default(_event: Dynamic) -> Nil {
+  panic as "Not valid outside browser"
+}
+
+@external(javascript, "./browser_ffi.mjs", "hideDragImage")
+fn hide_piece_image(_event: Dynamic) -> Nil {
   panic as "Not valid outside browser"
 }
