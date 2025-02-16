@@ -1,8 +1,14 @@
 :root {
+  --room-bg-color: #f4f4f4;
   --square-color-odd: #d2b48c;
   --square-color-even: #c19a6b;
+  --board-bg-color: #f3d5b8;
   --trap-square-color: #b76b5a;
-  --valid-square-color: #8fb3a8;
+  --valid-square-color: #32cd32;
+}
+
+body {
+  background-color: var(--room-bg-color);
 }
 
 /* General layout improvements */
@@ -12,7 +18,6 @@
   justify-content: center;
   align-items: center;
   min-height: 100vh;
-  background: #f4f4f4;
   margin: 0;
   padding: 20px;
   color: #ecf0f1;
@@ -98,16 +103,18 @@
 .board {
   display: grid;
   grid-template-columns: repeat(8, 1fr);
-  width: 640px;
-  height: 640px;
+  width: 730px;
+  height: 730px;
   border-radius: 8px;
   box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
   gap: 1px;
+  margin: 20px 0px;
+  background-color: var(--board-bg-color);
 }
 
 .square {
-  width: 80px;
-  height: 80px;
+  width: 90px;
+  height: 90px;
   border: none;
   display: flex;
   justify-content: center;
@@ -138,9 +145,11 @@
 .piece {
   width: 70px;
   height: 70px;
-  cursor: pointer;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  position: relative;
+  position: absolute;
+  cursor: grab;
+  animation: pieceAppear 0.3s ease-out;
+  user-select: none;
 }
 
 .piece:hover {
@@ -149,8 +158,8 @@
 }
 
 .piece:active {
-  cursor: pointer;
   transform: scale(1.05);
+  cursor: grabbing;
 }
 
 .piece.ghost {
@@ -170,6 +179,12 @@
   filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.3)) brightness(1.1);
 }
 
+.piece.dragging {
+  opacity: 0.8;
+  cursor: grabbing;
+  z-index: 1000;
+}
+
 /* Selected piece styling */
 .square.opting {
   box-shadow: inset 0 0 0 3px #27ae60;
@@ -183,6 +198,11 @@
 
 .square.valid {
   box-shadow: inset 0 0 0 3px var(--valid-square-color);
+  transition: all 0.2s ease-in-out;
+}
+
+.square.drag-over {
+  background-color: rgba(143, 179, 168, 0.3);
 }
 
 /* Available pieces section */
@@ -275,6 +295,17 @@
 @keyframes scaleIn {
   from {
     transform: scale(0.8);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes pieceAppear {
+  from {
+    transform: scale(0);
     opacity: 0;
   }
   to {
