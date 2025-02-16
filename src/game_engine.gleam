@@ -194,10 +194,15 @@ pub fn pass_turn(game: Game) -> Game {
 /// piece can move or not.
 ///
 /// This function performs several checks to ensure the move is legal:
-/// - Verifies that the game has remaining moves.
+/// - Verifies that the game has enough remaining moves.
 /// - Checks if the movement is within legal bounds.
 /// - Ensures the piece is not frozen.
 /// - Prevents rabbits from moving backwards.
+///
+/// This function allows movements with more than square of distance.
+/// If you try to move a piece more than one square this function
+/// will divide the movement into one-square movements and check if the path
+/// is valid.
 ///
 /// ## Parameters
 ///
