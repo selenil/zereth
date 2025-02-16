@@ -43,6 +43,7 @@ pub opaque type Msg {
   RepositionPiece(target_square: game_engine.Square)
   Undo
   PassTurn
+  Nothing
 }
 
 pub fn update(model: Model, msg: Msg) -> Model {
@@ -148,6 +149,7 @@ pub fn update(model: Model, msg: Msg) -> Model {
           ))
         _, _ -> model
       }
+    Nothing -> model
   }
 }
 
@@ -316,15 +318,11 @@ fn render_square(
   let piece_events = case square.piece, model.game.current_player_color {
     Some(piece), color if piece.color == color -> [
       event.on_click(Opting(piece)),
-      on_dragstart(Opting(piece)),
-      on_dragend(Opting(piece)),
+      event.on_mouse_down(Opting(piece)),
+      on_dragstart(Nothing),
     ]
 
-    Some(piece), _ -> [
-      event.on_click(EnemyOpting(piece)),
-      on_dragstart(EnemyOpting(piece)),
-      on_dragend(EnemyOpting(piece)),
-    ]
+    Some(piece), _ -> [event.on_click(EnemyOpting(piece))]
 
     None, _ -> {
       let message = case model.game.positioning {
@@ -511,11 +509,6 @@ fn on_dragstart(msg) {
 fn on_dragover(msg) {
   use evt <- event.on("dragover")
   prevent_default(evt)
-  Ok(msg)
-}
-
-fn on_dragend(msg) {
-  use _ <- event.on("dragend")
   Ok(msg)
 }
 
