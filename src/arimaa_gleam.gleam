@@ -1,4 +1,5 @@
 import gleam/bool
+import gleam/dynamic.{type Dynamic}
 import gleam/int
 import gleam/list
 import gleam/option.{type Option, None, Some}
@@ -49,7 +50,7 @@ pub fn update(model: Model, msg: Msg) -> Model {
   use <- bool.guard(model.game.win, model)
 
   case msg {
-    Undo -> Model(..model, game: game_engine.undo_last_move(model.game))
+    Undo -> set_game(model, game_engine.undo_last_move(model.game))
     PassTurn -> Model(..model, game: game_engine.pass_turn(model.game))
 
     Opting(piece) -> {
@@ -303,6 +304,7 @@ fn render_square(
       html.div(
         [
           attribute.class("piece"),
+          attribute.attribute("draggable", "true"),
           case model.opting_piece, model.enemy_opting_piece {
             Some(p), _ if p == piece -> attribute.class("opting")
             _, Some(p) if p == piece -> attribute.class("enemy-opting")
@@ -319,9 +321,15 @@ fn render_square(
   let piece_events = case square.piece, model.game.current_player_color {
     Some(piece), color if piece.color == color -> [
       event.on_click(Opting(piece)),
+      on_dragstart(Opting(piece)),
+      on_dragend(Opting(piece)),
     ]
 
-    Some(piece), _ -> [event.on_click(EnemyOpting(piece))]
+    Some(piece), _ -> [
+      event.on_click(EnemyOpting(piece)),
+      on_dragstart(EnemyOpting(piece)),
+      on_dragend(EnemyOpting(piece)),
+    ]
 
     None, _ -> {
       let message = case model.game.positioning {
@@ -333,7 +341,7 @@ fn render_square(
           }
       }
 
-      [event.on_click(message)]
+      [event.on_click(message), on_drop(message)]
     }
   }
 
@@ -361,6 +369,7 @@ fn render_square(
       },
       valid_coords_class,
       event.on_mouse_over(SquareOpting(square)),
+      on_dragover(SquareOpting(square)),
       ..piece_events
     ],
     [piece_element],
@@ -375,12 +384,24 @@ pub fn main() {
 }
 
 fn render_piece(piece: game_engine.Piece) {
-  html.button([event.on_click(Opting(piece))], [
-    html.img([
-      attribute.src(get_piece_asset_name(piece)),
-      attribute.alt("Piece"),
-    ]),
-  ])
+  let piece_alt =
+    game_engine.piece_color_to_string(piece.color)
+    <> "_"
+    <> game_engine.piece_kind_to_string(piece.kind)
+
+  html.div(
+    [
+      attribute.class("piece"),
+      attribute.attribute("draggable", "true"),
+      event.on_click(Opting(piece)),
+    ],
+    [
+      html.img([
+        attribute.src(get_piece_asset_name(piece)),
+        attribute.alt(piece_alt),
+      ]),
+    ],
+  )
 }
 
 fn place_piece(
@@ -484,4 +505,30 @@ fn get_piece_asset_name(piece: game_engine.Piece) {
   let kind = game_engine.piece_kind_to_string(piece.kind)
 
   "assets/pieces/" <> color <> "_" <> kind <> ".png"
+}
+
+fn on_dragstart(msg) {
+  use _ <- event.on("dragstart")
+  Ok(msg)
+}
+
+fn on_dragover(msg) {
+  use evt <- event.on("dragover")
+  prevent_default(evt)
+  Ok(msg)
+}
+
+fn on_dragend(msg) {
+  use _ <- event.on("dragend")
+  Ok(msg)
+}
+
+fn on_drop(msg) {
+  use _ <- event.on("drop")
+  Ok(msg)
+}
+
+@external(javascript, "./browser_ffi.mjs", "preventDefault")
+fn prevent_default(_event: Dynamic) -> Nil {
+  panic as "Not valid outside browser"
 }
