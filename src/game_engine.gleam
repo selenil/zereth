@@ -541,11 +541,14 @@ pub fn is_movement_legal(
     Error("Already a piece in the target square"),
   )
 
+  let assert Some(piece) = source_square.piece
   let valid_coords =
-    valid_coords_for_piece(board, remaining_moves, #(
-      source_square.x,
-      source_square.y,
-    ))
+    valid_coords_for_piece(
+      board,
+      remaining_moves,
+      #(source_square.x, source_square.y),
+      piece,
+    )
   use <- bool.guard(
     !list.contains(valid_coords, #(target_square.x, target_square.y)),
     Error("Not a valid square square"),
@@ -583,9 +586,9 @@ pub fn is_rabbit_moving_backwards(
   source_square: Square,
   target_square: Square,
 ) -> Bool {
-  case piece.kind {
-    Rabbit if piece.color == Gold -> target_square.x < source_square.x
-    Rabbit if piece.color == Silver -> target_square.x > source_square.x
+  case piece {
+    Piece(Rabbit, Gold, _) -> target_square.x < source_square.x
+    Piece(Rabbit, Silver, _) -> target_square.x > source_square.x
     _ -> False
   }
 }
@@ -1193,10 +1196,11 @@ pub fn valid_coords_for_piece(
   board: Board,
   remaining_moves: Int,
   source_coords: Coords,
+  piece: Piece,
 ) -> List(Coords) {
   let visited = set.new()
 
-  possible_moves(source_coords, remaining_moves, visited, board)
+  possible_moves(source_coords, remaining_moves, visited, board, piece)
   |> list.flatten()
 }
 
@@ -1225,6 +1229,7 @@ fn possible_moves(
   remaining_moves: Int,
   visited: Set(Coords),
   board: Board,
+  piece: Piece,
 ) -> List(List(Coords)) {
   use <- bool.guard(remaining_moves == 0, [])
 
@@ -1236,6 +1241,18 @@ fn possible_moves(
       use <- bool.guard(set.contains(visited, pos), False)
       use <- bool.guard(pos.0 < 1 || pos.0 > 8 || pos.1 < 1 || pos.1 > 8, False)
       use <- bool.guard(retrieve_square(board, pos).piece != None, False)
+      use <- bool.guard(
+        is_piece_frozen(board, piece, retrieve_square(board, pos)),
+        False,
+      )
+      use <- bool.guard(
+        is_rabbit_moving_backwards(
+          piece,
+          retrieve_square(board, start),
+          retrieve_square(board, pos),
+        ),
+        False,
+      )
       True
     })
 
@@ -1244,7 +1261,7 @@ fn possible_moves(
   let further_positions =
     next_positions
     |> list.flat_map(fn(pos) {
-      possible_moves(pos, remaining_moves - 1, new_visited, board)
+      possible_moves(pos, remaining_moves - 1, new_visited, board, piece)
     })
 
   [next_positions, ..further_positions]

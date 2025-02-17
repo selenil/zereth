@@ -66,13 +66,12 @@ pub fn update(model: Model, msg: Msg) -> Model {
           let source_square =
             game_engine.retrieve_square_from_piece(model.game.board, p)
 
-          Some(
-            game_engine.valid_coords_for_piece(
-              model.game.board,
-              model.game.remaining_moves,
-              #(source_square.x, source_square.y),
-            ),
-          )
+          Some(game_engine.valid_coords_for_piece(
+            model.game.board,
+            model.game.remaining_moves,
+            #(source_square.x, source_square.y),
+            p,
+          ))
         }
         _ -> None
       }
