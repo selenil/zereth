@@ -1,7 +1,3 @@
-export function preventDefault(event) {
-  event.preventDefault();
-}
-
 /**
  * Hides the default browser drag image/ghost that appears when dragging elements.
  *
@@ -29,8 +25,4 @@ export function hideDragImage(event) {
   }
 
   event.target.addEventListener("dragend", cleanup);
-}
-
-export function showDragImage(event) {
-  event.target.style.visibility = "visible";
 }

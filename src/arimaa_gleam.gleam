@@ -507,18 +507,13 @@ fn on_dragstart(msg) {
 
 fn on_dragover(msg) {
   use evt <- event.on("dragover")
-  prevent_default(evt)
+  event.prevent_default(evt)
   Ok(msg)
 }
 
 fn on_drop(msg) {
   use _ <- event.on("drop")
   Ok(msg)
-}
-
-@external(javascript, "./browser_ffi.mjs", "preventDefault")
-fn prevent_default(_event: Dynamic) -> Nil {
-  panic as "Not valid outside browser"
 }
 
 @external(javascript, "./browser_ffi.mjs", "hideDragImage")
