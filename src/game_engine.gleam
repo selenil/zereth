@@ -239,7 +239,8 @@ pub fn move_piece(
         Square(x1, y1, _), Square(x2, y2, _) if x1 == x2 && y1 != y2 ->
           int.absolute_value(y2 - y1)
 
-        _, _ -> panic as "Invalid move. Not ortogonal"
+        Square(x1, y1, _), Square(x2, y2, _) ->
+          int.absolute_value(x2 - x1) + int.absolute_value(y2 - y1)
       }
 
       use <- bool.guard(
@@ -255,7 +256,7 @@ pub fn move_piece(
       )
 
       let new_history_records =
-        generate_move_history_records(source_square, target_square)
+        generate_move_history_records(game.board, source_square, target_square)
 
       let history =
         list.fold(new_history_records, game.history, fn(acc, record) {
@@ -310,23 +311,117 @@ fn check_if_board_changed(game: Game, updated_board: Board) {
   }
 }
 
-fn generate_move_history_records(source_square: Square, target_square: Square) {
-  let is_x_axis = case source_square, target_square {
-    Square(x1, _, _), Square(x2, _, _) if x1 == x2 -> True
-    Square(_, y1, _), Square(_, y2, _) if y1 == y2 -> False
-    _, _ -> panic as "Invalid move. Not ortogonal"
+fn generate_move_history_records(
+  board: Board,
+  source_square: Square,
+  target_square: Square,
+) {
+  let is_diagonal =
+    int.absolute_value(source_square.x - target_square.x)
+    == int.absolute_value(source_square.y - target_square.y)
+
+  let generate = fn(from, to, map) {
+    list.range(from, to)
+    |> list.drop(1)
+    |> list.map(map)
   }
 
-  let coords = case source_square, target_square, is_x_axis {
-    Square(x1, y1, _), Square(_, y2, _), True ->
-      list.range(y1, y2)
-      |> list.drop(1)
-      |> list.map(fn(y) { #(x1, y) })
+  let coords = case source_square, target_square, is_diagonal {
+    // horizontal movement
+    Square(x1, y1, _), Square(x2, y2, _), False if x1 == x2 -> {
+      use y <- generate(y1, y2)
+      #(x1, y)
+    }
 
-    Square(x1, y1, _), Square(x2, _, _), False ->
-      list.range(x1, x2)
-      |> list.drop(1)
-      |> list.map(fn(x) { #(x, y1) })
+    // vertical movement
+    Square(x1, y1, _), Square(x2, y2, _), False if y1 == y2 -> {
+      use x <- generate(x1, x2)
+      #(x, y1)
+    }
+
+    // diagonal movement
+    Square(x1, y1, _), Square(x2, y2, _), True -> {
+      let dx = x2 - x1
+      let dy = y2 - y1
+      let x_dir = case dx > 0 {
+        True -> 1
+        False -> -1
+      }
+      let y_dir = case dy > 0 {
+        True -> 1
+        False -> -1
+      }
+
+      let length = int.absolute_value(x2 - x1)
+
+      let valid_paths =
+        case length {
+          1 -> {
+            let path1 = [#(x1 + x_dir, y1), #(x2, y2)]
+            let path2 = [#(x1, y1 + y_dir), #(x2, y2)]
+            [path1, path2]
+          }
+          2 -> {
+            // For diagonal distance of 2, we have four possible squares
+            // and one fixed intermediate square
+            // Each path goes as follows:
+            // 1. Move to a possible square
+            // 2. Move to the intermediate square
+            // 3. Move to another possible square
+            // 4. Move to the target square
+            let path1 = [
+              #(x1 + x_dir, y1),
+              #(x1 + x_dir, y1 + y_dir),
+              #(x1 + x_dir * 2, y1 + y_dir),
+              #(x2, y2),
+            ]
+            let path2 = [
+              #(x1, y1 + y_dir),
+              #(x1 + x_dir, y1 + y_dir),
+              #(x1 + x_dir, y1 + y_dir * 2),
+              #(x2, y2),
+            ]
+
+            [path1, path2]
+          }
+          _ -> panic as "Not valid"
+        }
+        |> list.filter(fn(path) {
+          list.all(path, fn(coord) {
+            let square = retrieve_square(board, coord)
+            square.piece == None
+          })
+        })
+
+      case valid_paths {
+        // if multiple paths are valid, we take the first one
+        [path, ..] -> path
+        [] -> panic as "Invalid move"
+      }
+    }
+
+    // this is a movement that isn't entirely diagonal
+    // but it includes both horizontal and vertical movements
+    // this only happens with four square movements and always
+    // composes of three movements within one axis and one movement
+    // in the other axis
+    Square(x1, y1, _), Square(x2, y2, _), False -> {
+      let paths =
+        find_four_square_paths(x1, y1, x2, y2)
+        |> list.filter(fn(path) {
+          list.all(path, fn(coord) {
+            let square = retrieve_square(board, coord)
+            square.piece == None
+          })
+        })
+
+      case paths {
+        [path] -> path
+        // if multiple paths are valid, we take the first one
+        [path, ..] -> path
+        [] -> panic as "Invalid move"
+      }
+    }
   }
 
   list.fold(coords, [], fn(acc, coord) {
@@ -338,6 +433,80 @@ fn generate_move_history_records(source_square: Square, target_square: Square) {
     [new, ..acc]
   })
   |> list.reverse()
+}
+
+fn find_four_square_paths(
+  x1: Int,
+  y1: Int,
+  x2: Int,
+  y2: Int,
+) -> List(List(Coords)) {
+  let dx = int.absolute_value(x2 - x1)
+  let dy = int.absolute_value(y2 - y1)
+
+  use <- bool.guard(dx + dy != 4, [])
+
+  let x_dir = case x2 > x1 {
+    True -> 1
+    False -> -1
+  }
+  let y_dir = case y2 > y1 {
+    True -> 1
+    False -> -1
+  }
+
+  // Generate both possible L-shaped paths
+  case dx, dy {
+    3, 1 -> {
+      // Path 1: Move in x direction first, then y
+      let path1 = [
+        #(x1 + x_dir, y1),
+        #(x1 + x_dir * 2, y1),
+        #(x1 + x_dir * 3, y1),
+        #(x2, y2),
+      ]
+
+      // Path 2: Move in y direction first, then x
+      let path2 = [
+        #(x1, y1 + y_dir),
+        #(x1 + x_dir, y1 + y_dir),
+        #(x1 + x_dir * 2, y1 + y_dir),
+        #(x2, y2),
+      ]
+
+      [path1, path2]
+    }
+
+    1, 3 -> {
+      // Path 1: Move in y direction first, then x
+      let path1 = [
+        #(x1, y1 + y_dir),
+        #(x1, y1 + y_dir * 2),
+        #(x1, y1 + y_dir * 3),
+        #(x2, y2),
+      ]
+
+      // Path 2: Move in x direction first, then y
+      let path2 = [
+        #(x1 + x_dir, y1),
+        #(x1 + x_dir, y1 + y_dir),
+        #(x1 + x_dir, y1 + y_dir * 2),
+        #(x2, y2),
+      ]
+
+      [path1, path2]
+    }
+
+    _, _ -> []
+  }
+  |> list.filter(fn(path) {
+    // Filter out paths that go outside the board
+
+    list.all(path, fn(coord) {
+      let #(x, y) = coord
+      x >= 1 && x <= 8 && y >= 1 && y <= 8
+    })
+  })
 }
 
 /// Checks if a movement between squares is legal according to the rules
@@ -1029,7 +1198,6 @@ pub fn valid_coords_for_piece(
 
   possible_moves(source_coords, remaining_moves, visited, board)
   |> list.flatten()
-  |> list.filter(fn(pos) { is_ortogonal(source_coords, pos) })
 }
 
 /// Converts a piece color to its string representation
@@ -1080,11 +1248,4 @@ fn possible_moves(
     })
 
   [next_positions, ..further_positions]
-}
-
-fn is_ortogonal(start: Coords, pos: Coords) -> Bool {
-  let #(x1, y1) = start
-  let #(x2, y2) = pos
-
-  x1 == x2 || y1 == y2
 }
