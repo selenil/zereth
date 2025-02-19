@@ -138,6 +138,15 @@ fn render_square(
   }
 
   let is_ghost = opting_square == Some(square)
+  let piece_element = case square.piece, opting_piece, is_ghost {
+    Some(piece), _, False -> [
+      render_piece(piece, piece_additional_classes, is_ghost),
+    ]
+    None, Some(opt_piece), True -> [
+      render_piece(opt_piece, piece_additional_classes, is_ghost),
+    ]
+    _, _, _ -> []
+  }
 
   let piece_events =
     piece_events(
@@ -174,10 +183,7 @@ fn render_square(
       on_dragover(SquareOpting(square)),
       ..piece_events
     ],
-    case square.piece {
-      Some(piece) -> [render_piece(piece, piece_additional_classes, is_ghost)]
-      None -> []
-    },
+    piece_element,
   )
 }
 
