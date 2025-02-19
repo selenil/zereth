@@ -30,9 +30,13 @@ pub fn render(model: model.Model) {
           }),
         ],
       ),
-      html.text(
-        " | Moves remaining: " <> int.to_string(model.game.remaining_moves),
-      ),
+      case model.game.positioning {
+        True -> html.text(" | Positioning")
+        False ->
+          html.text(
+            " | Moves remaining: " <> int.to_string(model.game.remaining_moves),
+          )
+      },
     ]),
   ])
 }

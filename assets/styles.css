@@ -5,21 +5,26 @@
   --board-bg-color: #f3d5b8;
   --trap-square-color: #b76b5a;
   --valid-square-color: #32cd32;
+
+  --board-width: 730px;
+  --board-height: 730px;
+  --square-width: 90px;
+  --square-height: 90px;
 }
 
 body {
+  margin: 0px;
+  padding: 0px;
   background-color: var(--room-bg-color);
 }
 
 /* General layout improvements */
-#app {
+.game-container {
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
   min-height: 100vh;
-  margin: 0;
-  padding: 20px;
   color: #ecf0f1;
 }
 
@@ -103,8 +108,8 @@ body {
 .board {
   display: grid;
   grid-template-columns: repeat(8, 1fr);
-  width: 730px;
-  height: 730px;
+  width: var(--board-width);
+  height: var(--board-height);
   border-radius: 8px;
   box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
   gap: 1px;
@@ -113,14 +118,14 @@ body {
 }
 
 .square {
-  width: 90px;
-  height: 90px;
+  width: var(--square-width);
+  height: var(--square-height);
   border: none;
   display: flex;
   justify-content: center;
   align-items: center;
   position: relative;
-  transition: all 0.2s ease;
+  /* transition: all 0.2s ease; */
 }
 
 .square:nth-child(odd) {
@@ -209,34 +214,18 @@ body {
 .available-pieces {
   display: grid;
   grid-template-columns: repeat(8, 1fr);
-  gap: 15px;
-  padding: 20px;
+  gap: calc(var(--square-width) * 0.9);
   border-radius: 8px;
   width: 640px;
-  margin: 0;
-}
-
-.available-pieces.gold {
-  background: linear-gradient(
-    to right,
-    rgba(241, 196, 15, 0.1),
-    rgba(241, 196, 15, 0.2)
-  );
-}
-
-.available-pieces.silver {
-  background: linear-gradient(
-    to right,
-    rgba(189, 195, 199, 0.1),
-    rgba(189, 195, 199, 0.2)
-  );
+  margin: 0px;
+  padding: 10px;
 }
 
 /* Phase title */
 .phase-title {
   font-size: 1.8rem;
   color: #ecf0f1;
-  margin: 20px 0;
+  margin: 0px;
   text-align: center;
   text-transform: uppercase;
   letter-spacing: 2px;

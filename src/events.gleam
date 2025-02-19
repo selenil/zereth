@@ -70,8 +70,25 @@ pub fn process_msg(model: model.Model, msg: Msg) {
     }
 
     SquareOpting(square) -> {
-      case model.valid_coords {
-        Some(coords) -> {
+      case model.valid_coords, model.game.positioning {
+        _, True -> {
+          case model.opting_piece, square {
+            Some(game_engine.Piece(_, game_engine.Gold, _)), square
+              if square.x == 1 || square.x == 2
+            -> {
+              model.Model(..model, opting_square: Some(square))
+            }
+
+            Some(game_engine.Piece(_, game_engine.Silver, _)), square
+              if square.x == 7 || square.x == 8
+            -> {
+              model.Model(..model, opting_square: Some(square))
+            }
+
+            _, _ -> model.Model(..model, opting_square: None)
+          }
+        }
+        Some(coords), _ -> {
           case list.contains(coords, #(square.x, square.y)) {
             True -> {
               model.Model(..model, opting_square: Some(square))
@@ -79,7 +96,7 @@ pub fn process_msg(model: model.Model, msg: Msg) {
             _ -> model.Model(..model, opting_square: None)
           }
         }
-        None -> model.Model(..model, opting_square: None)
+        _, _ -> model.Model(..model, opting_square: None)
       }
     }
 

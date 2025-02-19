@@ -142,20 +142,18 @@ fn render_square(
     Some(piece), _, False -> [
       render_piece(piece, piece_additional_classes, is_ghost),
     ]
+
     None, Some(opt_piece), True -> [
       render_piece(opt_piece, piece_additional_classes, is_ghost),
     ]
+
     _, _, _ -> []
   }
 
-  let piece_events =
-    piece_events(
-      square,
-      current_player_color,
-      positioning,
-      opting_piece,
-      enemy_opting_piece,
-    )
+  let piece_events = case positioning {
+    True -> []
+    False -> piece_events(square, current_player_color)
+  }
 
   let square_id = case square.piece {
     Some(piece) -> build_piece_id(piece)
@@ -171,6 +169,15 @@ fn render_square(
     None -> attribute.none()
   }
 
+  let interaction_message = case positioning {
+    True -> PlacePiece(square)
+    False ->
+      case opting_piece, enemy_opting_piece {
+        Some(_), Some(_) -> RepositionPiece(square)
+        _, _ -> MovePiece(square)
+      }
+  }
+
   html.div(
     [
       attribute.id(square_id),
@@ -180,7 +187,10 @@ fn render_square(
         False -> attribute.none()
       },
       valid_coords_class,
+      event.on_mouse_over(SquareOpting(square)),
+      event.on_click(interaction_message),
       on_dragover(SquareOpting(square)),
+      on_drop(interaction_message),
       ..piece_events
     ],
     piece_element,
@@ -190,9 +200,6 @@ fn render_square(
 fn piece_events(
   square: game_engine.Square,
   current_player_color: game_engine.PieceColor,
-  positioning: Bool,
-  opting_piece: Option(game_engine.Piece),
-  enemy_opting_piece: Option(game_engine.Piece),
 ) {
   case square.piece, current_player_color {
     Some(piece), color if piece.color == color -> [
@@ -202,18 +209,7 @@ fn piece_events(
 
     Some(piece), _ -> [event.on_click(EnemyOpting(piece))]
 
-    None, _ -> {
-      let message = case positioning {
-        True -> PlacePiece(square)
-        False ->
-          case opting_piece, enemy_opting_piece {
-            Some(_), Some(_) -> RepositionPiece(square)
-            _, _ -> MovePiece(square)
-          }
-      }
-
-      [event.on_click(message), on_drop(message)]
-    }
+    _, _ -> []
   }
 }
 

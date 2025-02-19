@@ -2,6 +2,7 @@ import gleam/bool
 
 import lustre
 
+import lustre/attribute
 import lustre/element
 import lustre/element/html
 
@@ -21,14 +22,15 @@ pub fn update(model: model.Model, msg: Msg) -> model.Model {
 
 pub fn view(model: model.Model) -> element.Element(Msg) {
   let board_view = ui.board(model, model.game.positioning)
+  let game_status_view = ui.game_status(model)
 
-  html.div([], [
+  html.div([attribute.class("game-container")], [
+    game_status_view,
+    board_view,
     case model.game.positioning {
       True -> html.text("")
-      False -> ui.game_status(model)
+      False -> ui.player_controls(model, events.Undo, events.PassTurn)
     },
-    board_view,
-    ui.player_controls(model, events.Undo, events.PassTurn),
   ])
 }
 
