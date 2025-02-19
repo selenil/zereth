@@ -840,13 +840,24 @@ pub fn place_piece(
       let updated_game =
         execute_placement(game, source_coords, target_piece, target_square)
 
-      let positioning = is_positioning(game.board)
+      let positioning = is_positioning(updated_game.board)
+      let current_player_color = case positioning {
+        True -> pass_player_color(updated_game)
+        False -> Gold
+      }
       let remaining_moves = case positioning {
         True -> 0
         False -> 4
       }
 
-      Ok(Game(..updated_game, positioning:, remaining_moves:))
+      Ok(
+        Game(
+          ..updated_game,
+          positioning:,
+          remaining_moves:,
+          current_player_color:,
+        ),
+      )
     }
   }
 }
@@ -957,6 +968,17 @@ pub fn is_positioning(board: Board) -> Bool {
     })
 
   list.any(position_squares, fn(square) { square.piece == None })
+}
+
+fn pass_player_color(game: Game) -> PieceColor {
+  let gold_pieces_to_place =
+    get_aviable_pieces_to_place(game.board)
+    |> list.filter(fn(piece) { piece.color == Gold })
+
+  case list.is_empty(gold_pieces_to_place) {
+    True -> Silver
+    False -> Gold
+  }
 }
 
 /// Undoes the last move made in the game by reverting the board state and updating the remaining moves.
