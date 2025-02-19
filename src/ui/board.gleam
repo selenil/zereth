@@ -26,32 +26,43 @@ fn render_positioning_board(model: model.Model) {
     game_engine.get_aviable_pieces_to_place(model.game.board)
 
   html.div([], [
-    html.h2([attribute.class("phase-title")], [
-      html.text("Positioning Phase"),
-      html.br([]),
-      html.span([attribute.style([#("font-size", "1rem")])], [
-        html.text("Place your pieces on the board"),
-      ]),
-    ]),
-    html.div(
-      [attribute.class("available-pieces gold")],
-      list.map(
-        list.filter(available_pieces, fn(piece) {
-          piece.color == game_engine.Gold
-        }),
-        fn(piece) { render_piece(piece, "", False) },
-      ),
-    ),
     html.div(
       [attribute.class("available-pieces silver")],
       list.map(
         list.filter(available_pieces, fn(piece) {
           piece.color == game_engine.Silver
         }),
-        fn(piece) { render_piece(piece, "", False) },
+        fn(piece) {
+          html.div(
+            [
+              event.on_click(Opting(piece)),
+              event.on_mouse_down(Opting(piece)),
+              on_dragstart(Nothing),
+            ],
+            [render_piece(piece, "", False)],
+          )
+        },
       ),
     ),
     render_board(model),
+    html.div(
+      [attribute.class("available-pieces gold")],
+      list.map(
+        list.filter(available_pieces, fn(piece) {
+          piece.color == game_engine.Gold
+        }),
+        fn(piece) {
+          html.div(
+            [
+              event.on_click(Opting(piece)),
+              event.on_mouse_down(Opting(piece)),
+              on_dragstart(Nothing),
+            ],
+            [render_piece(piece, "", False)],
+          )
+        },
+      ),
+    ),
   ])
 }
 
@@ -126,10 +137,7 @@ fn render_square(
     _, _, _ -> ""
   }
 
-  let is_ghost = case opting_square, square.piece {
-    Some(opting_square), None if opting_square == square -> True
-    _, _ -> False
-  }
+  let is_ghost = opting_square == Some(square)
 
   let piece_events =
     piece_events(
@@ -183,8 +191,7 @@ fn piece_events(
   case square.piece, current_player_color {
     Some(piece), color if piece.color == color -> [
       event.on_click(Opting(piece)),
-      event.on_mouse_down(Opting(piece)),
-      on_dragstart(Nothing),
+      on_dragstart(Opting(piece)),
     ]
 
     Some(piece), _ -> [event.on_click(EnemyOpting(piece))]
