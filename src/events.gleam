@@ -32,7 +32,8 @@ pub fn process_msg(model: model.Model, msg: Msg) {
 
       // we cannot opt for a piece that is frozen
       use <- bool.guard(
-        game_engine.is_piece_frozen(
+        !model.game.positioning
+          && game_engine.is_piece_frozen(
           model.game.board,
           piece,
           game_engine.retrieve_square_from_piece(model.game.board, piece),
@@ -40,8 +41,8 @@ pub fn process_msg(model: model.Model, msg: Msg) {
         model,
       )
 
-      let valid_coords = case opting_piece {
-        Some(p) -> {
+      let valid_coords = case opting_piece, model.game.positioning {
+        Some(p), False -> {
           let source_square =
             game_engine.retrieve_square_from_piece(model.game.board, p)
 
@@ -52,7 +53,7 @@ pub fn process_msg(model: model.Model, msg: Msg) {
             p,
           ))
         }
-        _ -> None
+        _, _ -> None
       }
 
       model.Model(..model, opting_piece:, valid_coords:, error: None)
@@ -84,18 +85,18 @@ pub fn process_msg(model: model.Model, msg: Msg) {
 
     PlacePiece(target_square) -> {
       case model.opting_piece {
-        Some(piece) -> {
+        Some(piece) if piece.color == model.game.current_player_color -> {
           case
             list.find(model.game.board, fn(square) {
               square.piece == Some(piece)
             })
           {
-            Ok(dest_square) ->
+            Ok(source_square) ->
               place_piece(
                 model,
                 #(target_square.x, target_square.y),
                 piece,
-                Some(#(dest_square.x, dest_square.y)),
+                Some(#(source_square.x, source_square.y)),
               )
             Error(_) ->
               place_piece(
@@ -106,7 +107,7 @@ pub fn process_msg(model: model.Model, msg: Msg) {
               )
           }
         }
-        None -> model
+        _ -> model
       }
     }
 
@@ -133,14 +134,18 @@ pub fn process_msg(model: model.Model, msg: Msg) {
 
 fn place_piece(
   model: model.Model,
-  coords: game_engine.Coords,
+  target_coords: game_engine.Coords,
   piece: game_engine.Piece,
-  dest_coords: Option(game_engine.Coords),
+  source_coords: Option(game_engine.Coords),
 ) -> model.Model {
-  case game_engine.place_piece(model.game, coords, piece, dest_coords) {
-    Ok(game) ->
-      model.Model(..model, game: game, error: None, opting_piece: None)
-    Error(error) -> model.Model(..model, error: Some(error), opting_piece: None)
+  case
+    game_engine.place_piece(model.game, target_coords, piece, source_coords)
+  {
+    Ok(game) -> set_game(model, game)
+    Error(error) -> {
+      logger.print_placement_error(error, piece, target_coords)
+      set_error(model, error)
+    }
   }
 }
 
