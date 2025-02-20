@@ -14,3 +14,5 @@ gleam run -m lustre/dev start
 ```
 
 Visit http://localhost:1234 to view the application.
+
+Arimaa official website can be found at https://arimaa.com/arimaa
