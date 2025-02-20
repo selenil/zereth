@@ -320,78 +320,16 @@ fn generate_move_history_records(
     int.absolute_value(source_square.x - target_square.x)
     == int.absolute_value(source_square.y - target_square.y)
 
-  let generate = fn(from, to, map) {
-    list.range(from, to)
-    |> list.drop(1)
-    |> list.map(map)
-  }
-
   let coords = case source_square, target_square, is_diagonal {
-    // horizontal movement
-    Square(x1, y1, _), Square(x2, y2, _), False if x1 == x2 -> {
-      use y <- generate(y1, y2)
-      #(x1, y)
-    }
-
-    // vertical movement
-    Square(x1, y1, _), Square(x2, y2, _), False if y1 == y2 -> {
-      use x <- generate(x1, x2)
-      #(x, y1)
-    }
+    // one-axis movement
+    Square(x1, y1, _), Square(x2, y2, _), False if x1 == x2 || y1 == y2 ->
+      ortogonal_path(x1, x2, y1, y2)
 
     // diagonal movement
     Square(x1, y1, _), Square(x2, y2, _), True -> {
-      let dx = x2 - x1
-      let dy = y2 - y1
-      let x_dir = case dx > 0 {
-        True -> 1
-        False -> -1
-      }
-      let y_dir = case dy > 0 {
-        True -> 1
-        False -> -1
-      }
-
-      let length = int.absolute_value(x2 - x1)
-
       let valid_paths =
-        case length {
-          1 -> {
-            let path1 = [#(x1 + x_dir, y1), #(x2, y2)]
-            let path2 = [#(x1, y1 + y_dir), #(x2, y2)]
-            [path1, path2]
-          }
-          2 -> {
-            // For diagonal distance of 2, we have four possible squares
-            // and one fixed intermediate square
-            // Each path goes as follows:
-            // 1. Move to a possible square
-            // 2. Move to the intermediate square
-            // 3. Move to another possible square
-            // 4. Move to the target square
-            let path1 = [
-              #(x1 + x_dir, y1),
-              #(x1 + x_dir, y1 + y_dir),
-              #(x1 + x_dir * 2, y1 + y_dir),
-              #(x2, y2),
-            ]
-            let path2 = [
-              #(x1, y1 + y_dir),
-              #(x1 + x_dir, y1 + y_dir),
-              #(x1 + x_dir, y1 + y_dir * 2),
-              #(x2, y2),
-            ]
-
-            [path1, path2]
-          }
-          _ -> panic as "Not valid"
-        }
-        |> list.filter(fn(path) {
-          list.all(path, fn(coord) {
-            let square = retrieve_square(board, coord)
-            square.piece == None
-          })
-        })
+        diagonal_paths(x1, y1, x2, y2)
+        |> remove_invalid_paths(source_square, board)
 
       case valid_paths {
         // if multiple paths are valid, we take the first one
@@ -402,18 +340,10 @@ fn generate_move_history_records(
 
     // this is a movement that isn't entirely diagonal
     // but it includes both horizontal and vertical movements
-    // this only happens with four square movements and always
-    // composes of three movements within one axis and one movement
-    // in the other axis
     Square(x1, y1, _), Square(x2, y2, _), False -> {
       let paths =
-        find_four_square_paths(x1, y1, x2, y2)
-        |> list.filter(fn(path) {
-          list.all(path, fn(coord) {
-            let square = retrieve_square(board, coord)
-            square.piece == None
-          })
-        })
+        multi_axis_paths(x1, y1, x2, y2)
+        |> remove_invalid_paths(source_square, board)
 
       case paths {
         [path] -> path
@@ -433,80 +363,6 @@ fn generate_move_history_records(
     [new, ..acc]
   })
   |> list.reverse()
-}
-
-fn find_four_square_paths(
-  x1: Int,
-  y1: Int,
-  x2: Int,
-  y2: Int,
-) -> List(List(Coords)) {
-  let dx = int.absolute_value(x2 - x1)
-  let dy = int.absolute_value(y2 - y1)
-
-  use <- bool.guard(dx + dy != 4, [])
-
-  let x_dir = case x2 > x1 {
-    True -> 1
-    False -> -1
-  }
-  let y_dir = case y2 > y1 {
-    True -> 1
-    False -> -1
-  }
-
-  // Generate both possible L-shaped paths
-  case dx, dy {
-    3, 1 -> {
-      // Path 1: Move in x direction first, then y
-      let path1 = [
-        #(x1 + x_dir, y1),
-        #(x1 + x_dir * 2, y1),
-        #(x1 + x_dir * 3, y1),
-        #(x2, y2),
-      ]
-
-      // Path 2: Move in y direction first, then x
-      let path2 = [
-        #(x1, y1 + y_dir),
-        #(x1 + x_dir, y1 + y_dir),
-        #(x1 + x_dir * 2, y1 + y_dir),
-        #(x2, y2),
-      ]
-
-      [path1, path2]
-    }
-
-    1, 3 -> {
-      // Path 1: Move in y direction first, then x
-      let path1 = [
-        #(x1, y1 + y_dir),
-        #(x1, y1 + y_dir * 2),
-        #(x1, y1 + y_dir * 3),
-        #(x2, y2),
-      ]
-
-      // Path 2: Move in x direction first, then y
-      let path2 = [
-        #(x1 + x_dir, y1),
-        #(x1 + x_dir, y1 + y_dir),
-        #(x1 + x_dir, y1 + y_dir * 2),
-        #(x2, y2),
-      ]
-
-      [path1, path2]
-    }
-
-    _, _ -> []
-  }
-  |> list.filter(fn(path) {
-    // Filter out paths that go outside the board
-
-    list.all(path, fn(coord) {
-      let #(x, y) = coord
-      x >= 1 && x <= 8 && y >= 1 && y <= 8
-    })
-  })
 }
 
 /// Checks if a movement between squares is legal according to the rules
@@ -1090,13 +946,9 @@ pub fn perform_captures(game: Game) -> Game {
     case trap_square.piece {
       None -> acc
       Some(piece) -> {
-        let has_adjacent_allies =
-          adjacent_pieces(game.board, trap_coords)
-          |> list.any(fn(p) { p.color == piece.color })
-
-        case has_adjacent_allies {
-          True -> acc
-          False -> {
+        case is_piece_captured(game.board, trap_square) {
+          False -> acc
+          True -> {
             let updated_squares = [Square(..trap_square, piece: None), ..acc.0]
             let updated_history = [Capture(piece, trap_coords), ..acc.1]
             #(updated_squares, updated_history)
@@ -1113,6 +965,19 @@ pub fn perform_captures(game: Game) -> Game {
     })
 
   Game(..game, board: updated_board, history: updated_history)
+}
+
+fn is_piece_captured(board: Board, square: Square) {
+  case square.piece {
+    None -> False
+    Some(piece) -> {
+      let has_adjacent_allies =
+        adjacent_pieces(board, #(square.x, square.y))
+        |> list.any(fn(p) { p.color == piece.color })
+
+      !has_adjacent_allies
+    }
+  }
 }
 
 /// Checks if either player has won the game and updates the game state accordingly.
@@ -1221,9 +1086,29 @@ pub fn valid_coords_for_piece(
   piece: Piece,
 ) -> List(Coords) {
   let visited = set.new()
+  let source_square = retrieve_square(board, source_coords)
 
-  possible_moves(source_coords, remaining_moves, visited, board, piece)
+  possible_moves(source_square, remaining_moves, visited, board, piece)
   |> list.flatten()
+  |> list.filter(fn(target_coords) {
+    let is_diagonal =
+      int.absolute_value(source_coords.0 - target_coords.0)
+      == int.absolute_value(source_coords.1 - target_coords.0)
+
+    let paths =
+      case source_coords, target_coords, is_diagonal {
+        #(x1, x2), #(y1, y2), False if x1 == x2 || y1 == 2 -> [
+          ortogonal_path(x1, x2, y1, y2),
+        ]
+
+        #(x1, x2), #(y1, y2), True -> diagonal_paths(x1, y1, x2, y2)
+
+        #(x1, x2), #(y1, y2), _ -> multi_axis_paths(x1, y1, x2, y2)
+      }
+      |> remove_invalid_paths(source_square, board)
+
+    !list.is_empty(paths)
+  })
 }
 
 /// Converts a piece color to its string representation
@@ -1247,7 +1132,7 @@ pub fn piece_kind_to_string(piece_kind: PieceKind) {
 }
 
 fn possible_moves(
-  start: Coords,
+  start: Square,
   remaining_moves: Int,
   visited: Set(Coords),
   board: Board,
@@ -1258,7 +1143,7 @@ fn possible_moves(
   let directions = [#(0, 1), #(0, -1), #(1, 0), #(-1, 0)]
   let next_positions =
     directions
-    |> list.map(fn(dir) { #(start.0 + dir.0, start.1 + dir.1) })
+    |> list.map(fn(dir) { #(start.x + dir.0, start.y + dir.1) })
     |> list.filter(fn(pos) {
       use <- bool.guard(set.contains(visited, pos), False)
       use <- bool.guard(pos.0 < 1 || pos.0 > 8 || pos.1 < 1 || pos.1 > 8, False)
@@ -1268,23 +1153,215 @@ fn possible_moves(
         False,
       )
       use <- bool.guard(
-        is_rabbit_moving_backwards(
-          piece,
-          retrieve_square(board, start),
-          retrieve_square(board, pos),
-        ),
+        is_rabbit_moving_backwards(piece, start, retrieve_square(board, pos)),
         False,
       )
       True
     })
 
-  let new_visited = set.insert(visited, start)
+  let new_visited = set.insert(visited, #(start.x, start.y))
 
   let further_positions =
     next_positions
     |> list.flat_map(fn(pos) {
-      possible_moves(pos, remaining_moves - 1, new_visited, board, piece)
+      possible_moves(
+        retrieve_square(board, pos),
+        remaining_moves - 1,
+        new_visited,
+        board,
+        piece,
+      )
     })
 
   [next_positions, ..further_positions]
+}
+
+// movements in only one axis
+fn ortogonal_path(x1, x2, y1, y2) {
+  let is_x_axis = x1 == x2
+
+  list.range(0, case is_x_axis {
+    True -> x2 - x1
+    False -> y2 - y1
+  })
+  |> list.drop(1)
+  |> list.map(fn(i) {
+    case is_x_axis {
+      True -> #(x1 + i, y1)
+      False -> #(x1, y1 + i)
+    }
+  })
+}
+
+// diagonal movements are subdivided into horizontal and vertical movements
+fn diagonal_paths(x1: Int, y1: Int, x2: Int, y2: Int) {
+  let dx = x2 - x1
+  let dy = y2 - y1
+  let x_dir = case dx > 0 {
+    True -> 1
+    False -> -1
+  }
+  let y_dir = case dy > 0 {
+    True -> 1
+    False -> -1
+  }
+
+  let length = int.absolute_value(x2 - x1)
+
+  case length {
+    1 -> {
+      let path1 = [#(x1 + x_dir, y1), #(x2, y2)]
+      let path2 = [#(x1, y1 + y_dir), #(x2, y2)]
+      [path1, path2]
+    }
+    2 -> {
+      // For diagonal distance of 2, we have four possible squares
+      // and one fixed intermediate square
+      // Each path goes as follows:
+      // 1. Move to a possible square
+      // 2. Move to the intermediate square
+      // 3. Move to another possible square
+      // 4. Move to the target square
+      let path1 = [
+        #(x1 + x_dir, y1),
+        #(x1 + x_dir, y1 + y_dir),
+        #(x1 + x_dir * 2, y1 + y_dir),
+        #(x2, y2),
+      ]
+      let path2 = [
+        #(x1, y1 + y_dir),
+        #(x1 + x_dir, y1 + y_dir),
+        #(x1 + x_dir, y1 + y_dir * 2),
+        #(x2, y2),
+      ]
+
+      [path1, path2]
+    }
+    _ -> panic as "Not valid"
+  }
+}
+
+fn multi_axis_paths(x1: Int, y1: Int, x2: Int, y2: Int) {
+  let dx = int.absolute_value(x2 - x1)
+  let dy = int.absolute_value(y2 - y1)
+  let total_length = dx + dy
+
+  use <- bool.guard(!list.contains([2, 3, 4], total_length), [])
+
+  let x_dir = case x2 > x1 {
+    True -> 1
+    False -> -1
+  }
+  let y_dir = case y2 > y1 {
+    True -> 1
+    False -> -1
+  }
+
+  // Generate both possible L-shaped paths
+  case dx, dy {
+    1, 1 -> {
+      // Length 2: One move in each direction
+      let path1 = [#(x1 + x_dir, y1), #(x2, y2)]
+      let path2 = [#(x1, y1 + y_dir), #(x2, y2)]
+      [path1, path2]
+    }
+
+    2, 1 -> {
+      // Length 3: Two moves in x, one in y
+      let path1 = [#(x1 + x_dir, y1), #(x1 + x_dir * 2, y1), #(x2, y2)]
+      let path2 = [#(x1, y1 + y_dir), #(x1 + x_dir, y1 + y_dir), #(x2, y2)]
+      [path1, path2]
+    }
+
+    1, 2 -> {
+      // Length 3: Two moves in y, one in x
+      let path1 = [#(x1, y1 + y_dir), #(x1, y1 + y_dir * 2), #(x2, y2)]
+      let path2 = [#(x1 + x_dir, y1), #(x1 + x_dir, y1 + y_dir), #(x2, y2)]
+      [path1, path2]
+    }
+
+    3, 1 -> {
+      // Length 4: Three moves in x, one in y
+      let path1 = [
+        #(x1 + x_dir, y1),
+        #(x1 + x_dir * 2, y1),
+        #(x1 + x_dir * 3, y1),
+        #(x2, y2),
+      ]
+      let path2 = [
+        #(x1, y1 + y_dir),
+        #(x1 + x_dir, y1 + y_dir),
+        #(x1 + x_dir * 2, y1 + y_dir),
+        #(x2, y2),
+      ]
+      [path1, path2]
+    }
+
+    1, 3 -> {
+      // Length 4: Three moves in y, one in x
+      let path1 = [
+        #(x1, y1 + y_dir),
+        #(x1, y1 + y_dir * 2),
+        #(x1, y1 + y_dir * 3),
+        #(x2, y2),
+      ]
+      let path2 = [
+        #(x1 + x_dir, y1),
+        #(x1 + x_dir, y1 + y_dir),
+        #(x1 + x_dir, y1 + y_dir * 2),
+        #(x2, y2),
+      ]
+      [path1, path2]
+    }
+
+    _, _ -> []
+  }
+  |> list.filter(fn(path) {
+    // Filter out paths that go outside the board
+    list.all(path, fn(coord) {
+      let #(x, y) = coord
+      x >= 1 && x <= 8 && y >= 1 && y <= 8
+    })
+  })
+}
+
+fn remove_invalid_paths(
+  paths: List(List(Coords)),
+  start_square: Square,
+  board: Board,
+) {
+  list.filter(paths, fn(path) {
+    list.all(path, fn(coord) {
+      let square = retrieve_square(board, coord)
+      square.piece == None
+    })
+    && is_path_valid(board, path, start_square, True)
+  })
+}
+
+fn is_path_valid(
+  board: Board,
+  path: List(Coords),
+  actual_square: Square,
+  last_result: Bool,
+) {
+  use <- bool.guard(path == [], last_result)
+  use <- bool.guard(!last_result, False)
+
+  let assert [target_coords, ..rest] = path
+  let assert Some(piece) = actual_square.piece
+
+  let updated_board =
+    update_board(board, [
+      Square(x: actual_square.x, y: actual_square.y, piece: None),
+      Square(x: target_coords.0, y: target_coords.1, piece: Some(piece)),
+    ])
+
+  let target_square = retrieve_square(updated_board, target_coords)
+
+  let last_result =
+    !is_piece_captured(updated_board, target_square)
+    && !is_piece_frozen(updated_board, piece, target_square)
+
+  is_path_valid(updated_board, rest, target_square, last_result)
 }
