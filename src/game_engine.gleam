@@ -968,6 +968,7 @@ pub fn perform_captures(game: Game) -> Game {
 }
 
 fn is_piece_captured(board: Board, square: Square) {
+  use <- bool.guard(!list.contains(trap_squares, #(square.x, square.y)), False)
   case square.piece {
     None -> False
     Some(piece) -> {
@@ -1090,19 +1091,24 @@ pub fn valid_coords_for_piece(
   let #(x1, y1) = source_coords
 
   possible_moves(source_square, remaining_moves, visited, board, piece)
-  |> list.flatten()
+  |> list.filter(fn(coord) {
+    let square = retrieve_square(board, coord)
+    square.piece == None
+  })
   |> list.filter(fn(target_coords) {
     let #(x2, y2) = target_coords
     let is_diagonal = int.absolute_value(x1 - x2) == int.absolute_value(y1 - y2)
 
-    let paths = case is_diagonal {
-      True -> diagonal_paths(x1, y1, x2, y2)
-      False ->
-        case x1 == x2 || y1 == y2 {
-          True -> [ortogonal_path(x1, y1, x2, y2)]
-          False -> multi_axis_paths(x1, y1, x2, y2)
-        }
-    }
+    let paths =
+      case is_diagonal {
+        True -> diagonal_paths(x1, y1, x2, y2)
+        False ->
+          case x1 == x2 || y1 == y2 {
+            True -> [ortogonal_path(x1, y1, x2, y2)]
+            False -> multi_axis_paths(x1, y1, x2, y2)
+          }
+      }
+      |> remove_invalid_paths(source_square, board)
 
     !list.is_empty(paths)
   })
@@ -1114,7 +1120,7 @@ fn possible_moves(
   visited: Set(Coords),
   board: Board,
   piece: Piece,
-) -> List(List(Coords)) {
+) -> List(Coords) {
   use <- bool.guard(remaining_moves == 0, [])
 
   let directions = [#(0, 1), #(0, -1), #(1, 0), #(-1, 0)]
@@ -1150,7 +1156,7 @@ fn possible_moves(
       )
     })
 
-  [next_positions, ..further_positions]
+  list.fold(further_positions, next_positions, fn(acc, path) { [path, ..acc] })
 }
 
 fn remove_invalid_paths(
@@ -1158,12 +1164,7 @@ fn remove_invalid_paths(
   start_square: Square,
   board: Board,
 ) {
-  list.filter(paths, fn(path) {
-    list.all(path, fn(coord) {
-      let square = retrieve_square(board, coord)
-      square.piece == None
-    })
-  })
+  list.filter(paths, is_path_valid(board, _, start_square))
 }
 
 fn is_path_valid(board: Board, path: List(Coords), actual_square: Square) {
@@ -1179,7 +1180,6 @@ fn is_path_valid(board: Board, path: List(Coords), actual_square: Square) {
         ])
 
       let target_square = retrieve_square(updated_board, target_coords)
-
       case
         !is_piece_captured(updated_board, target_square)
         && !is_piece_frozen(updated_board, piece, target_square)
