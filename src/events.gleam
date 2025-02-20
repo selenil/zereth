@@ -130,15 +130,18 @@ pub fn process_msg(model: model.Model, msg: Msg) {
 
     MovePiece(target_square) ->
       case model.opting_piece {
-        Some(piece) ->
+        Some(piece) if target_square.piece != Some(piece) ->
           move_piece(model, piece, #(target_square.x, target_square.y))
 
-        None -> model
+        _ -> model
       }
 
     RepositionPiece(target_square) ->
       case model.opting_piece, model.enemy_opting_piece {
-        Some(strong_piece), Some(weak_piece) ->
+        Some(strong_piece), Some(weak_piece)
+          if target_square.piece != Some(strong_piece)
+          && target_square.piece != Some(weak_piece)
+        ->
           reposition_piece(model, strong_piece, weak_piece, #(
             target_square.x,
             target_square.y,
