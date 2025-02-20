@@ -1088,30 +1088,32 @@ pub fn valid_coords_for_piece(
 ) -> List(Coords) {
   let visited = set.new()
   let source_square = retrieve_square(board, source_coords)
-  let #(x1, y1) = source_coords
 
   possible_moves(source_square, remaining_moves, visited, board, piece)
   |> list.filter(fn(coord) {
     let square = retrieve_square(board, coord)
     square.piece == None
   })
-  |> list.filter(fn(target_coords) {
-    let #(x2, y2) = target_coords
-    let is_diagonal = int.absolute_value(x1 - x2) == int.absolute_value(y1 - y2)
+  // TODO: Fix this, it's not working properly and marks invalid
+  // paths as valid, probably because the pathfinding algorithm
+  // is not simulating well the path
+  //|> list.filter(fn(target_coords) {
+  //let #(x2, y2) = target_coords
+  //let is_diagonal = int.absolute_value(x1 - x2) == int.absolute_value(y1 - //y2)
+  //
+  //let paths =
+  //case is_diagonal {
+  //True -> diagonal_paths(x1, y1, x2, y2)
+  //False ->
+  //case x1 == x2 || y1 == y2 {
+  //True -> [ortogonal_path(x1, y1, x2, y2)]
+  //False -> multi_axis_paths(x1, y1, x2, y2)
+  //}
+  //}
+  //|> remove_invalid_paths(source_square, board)
 
-    let paths =
-      case is_diagonal {
-        True -> diagonal_paths(x1, y1, x2, y2)
-        False ->
-          case x1 == x2 || y1 == y2 {
-            True -> [ortogonal_path(x1, y1, x2, y2)]
-            False -> multi_axis_paths(x1, y1, x2, y2)
-          }
-      }
-      |> remove_invalid_paths(source_square, board)
-
-    !list.is_empty(paths)
-  })
+  // !list.is_empty(paths)
+  //})
 }
 
 fn possible_moves(
@@ -1168,27 +1170,31 @@ fn remove_invalid_paths(
 }
 
 fn is_path_valid(board: Board, path: List(Coords), actual_square: Square) {
-  case path {
-    [] -> True
-    [target_coords, ..rest] -> {
-      let assert Some(piece) = actual_square.piece
+  let #(state, _, _) = {
+    use acc, target_coords <- list.fold(path, #(True, board, actual_square))
+    let #(state, board, actual_square) = acc
+    use <- bool.guard(!state, #(False, board, actual_square))
 
-      let updated_board =
-        update_board(board, [
-          Square(x: actual_square.x, y: actual_square.y, piece: None),
-          Square(x: target_coords.0, y: target_coords.1, piece: Some(piece)),
-        ])
+    let assert Some(piece) = actual_square.piece
 
-      let target_square = retrieve_square(updated_board, target_coords)
-      case
-        !is_piece_captured(updated_board, target_square)
-        && !is_piece_frozen(updated_board, piece, target_square)
-      {
-        True -> is_path_valid(updated_board, rest, target_square)
-        False -> False
-      }
+    let intermediate_board =
+      update_board(board, [
+        Square(x: actual_square.x, y: actual_square.y, piece: None),
+        Square(x: target_coords.0, y: target_coords.1, piece: Some(piece)),
+      ])
+
+    let target_square = retrieve_square(intermediate_board, target_coords)
+
+    case
+      is_piece_captured(intermediate_board, target_square)
+      || is_piece_frozen(intermediate_board, piece, target_square)
+    {
+      True -> #(False, intermediate_board, actual_square)
+      False -> #(True, intermediate_board, target_square)
     }
   }
+
+  state
 }
 
 // movements in only one axis
