@@ -1087,48 +1087,25 @@ pub fn valid_coords_for_piece(
 ) -> List(Coords) {
   let visited = set.new()
   let source_square = retrieve_square(board, source_coords)
+  let #(x1, y1) = source_coords
 
   possible_moves(source_square, remaining_moves, visited, board, piece)
   |> list.flatten()
   |> list.filter(fn(target_coords) {
-    let is_diagonal =
-      int.absolute_value(source_coords.0 - target_coords.0)
-      == int.absolute_value(source_coords.1 - target_coords.0)
+    let #(x2, y2) = target_coords
+    let is_diagonal = int.absolute_value(x1 - x2) == int.absolute_value(y1 - y2)
 
-    let paths =
-      case source_coords, target_coords, is_diagonal {
-        #(x1, x2), #(y1, y2), False if x1 == x2 || y1 == 2 -> [
-          ortogonal_path(x1, x2, y1, y2),
-        ]
-
-        #(x1, x2), #(y1, y2), True -> diagonal_paths(x1, y1, x2, y2)
-
-        #(x1, x2), #(y1, y2), _ -> multi_axis_paths(x1, y1, x2, y2)
-      }
-      |> remove_invalid_paths(source_square, board)
+    let paths = case is_diagonal {
+      True -> diagonal_paths(x1, y1, x2, y2)
+      False ->
+        case x1 == x2 || y1 == y2 {
+          True -> [ortogonal_path(x1, y1, x2, y2)]
+          False -> multi_axis_paths(x1, y1, x2, y2)
+        }
+    }
 
     !list.is_empty(paths)
   })
-}
-
-/// Converts a piece color to its string representation
-pub fn piece_color_to_string(piece_color: PieceColor) {
-  case piece_color {
-    Gold -> "gold"
-    Silver -> "silver"
-  }
-}
-
-/// Converts a piece kind to its string representation
-pub fn piece_kind_to_string(piece_kind: PieceKind) {
-  case piece_kind {
-    Elephant -> "elephant"
-    Camel -> "camel"
-    Horse -> "horse"
-    Dog -> "dog"
-    Cat -> "cat"
-    Rabbit -> "rabbit"
-  }
 }
 
 fn possible_moves(
@@ -1176,25 +1153,77 @@ fn possible_moves(
   [next_positions, ..further_positions]
 }
 
-// movements in only one axis
-fn ortogonal_path(x1, x2, y1, y2) {
-  let is_x_axis = x1 == x2
-
-  list.range(0, case is_x_axis {
-    True -> x2 - x1
-    False -> y2 - y1
+fn remove_invalid_paths(
+  paths: List(List(Coords)),
+  start_square: Square,
+  board: Board,
+) {
+  list.filter(paths, fn(path) {
+    list.all(path, fn(coord) {
+      let square = retrieve_square(board, coord)
+      square.piece == None
+    })
   })
-  |> list.drop(1)
+}
+
+fn is_path_valid(board: Board, path: List(Coords), actual_square: Square) {
+  case path {
+    [] -> True
+    [target_coords, ..rest] -> {
+      let assert Some(piece) = actual_square.piece
+
+      let updated_board =
+        update_board(board, [
+          Square(x: actual_square.x, y: actual_square.y, piece: None),
+          Square(x: target_coords.0, y: target_coords.1, piece: Some(piece)),
+        ])
+
+      let target_square = retrieve_square(updated_board, target_coords)
+
+      case
+        !is_piece_captured(updated_board, target_square)
+        && !is_piece_frozen(updated_board, piece, target_square)
+      {
+        True -> is_path_valid(updated_board, rest, target_square)
+        False -> False
+      }
+    }
+  }
+}
+
+// movements in only one axis
+pub fn ortogonal_path(x1, x2, y1, y2) {
+  let is_x_axis = x1 == x2
+  let dx = x2 - x1
+  let dy = y2 - y1
+  let steps = case is_x_axis {
+    True -> int.absolute_value(dy)
+    False -> int.absolute_value(dx)
+  }
+  let dir = case is_x_axis {
+    True ->
+      case dy > 0 {
+        True -> 1
+        False -> -1
+      }
+    False ->
+      case dx > 0 {
+        True -> 1
+        False -> -1
+      }
+  }
+
+  list.range(1, steps)
   |> list.map(fn(i) {
     case is_x_axis {
-      True -> #(x1 + i, y1)
-      False -> #(x1, y1 + i)
+      True -> #(x1, y1 + dir * i)
+      False -> #(x1 + dir * i, y1)
     }
   })
 }
 
 // diagonal movements are subdivided into horizontal and vertical movements
-fn diagonal_paths(x1: Int, y1: Int, x2: Int, y2: Int) {
+pub fn diagonal_paths(x1: Int, y1: Int, x2: Int, y2: Int) {
   let dx = x2 - x1
   let dy = y2 - y1
   let x_dir = case dx > 0 {
@@ -1241,7 +1270,7 @@ fn diagonal_paths(x1: Int, y1: Int, x2: Int, y2: Int) {
   }
 }
 
-fn multi_axis_paths(x1: Int, y1: Int, x2: Int, y2: Int) {
+pub fn multi_axis_paths(x1: Int, y1: Int, x2: Int, y2: Int) {
   let dx = int.absolute_value(x2 - x1)
   let dy = int.absolute_value(y2 - y1)
   let total_length = dx + dy
@@ -1259,13 +1288,6 @@ fn multi_axis_paths(x1: Int, y1: Int, x2: Int, y2: Int) {
 
   // Generate both possible L-shaped paths
   case dx, dy {
-    1, 1 -> {
-      // Length 2: One move in each direction
-      let path1 = [#(x1 + x_dir, y1), #(x2, y2)]
-      let path2 = [#(x1, y1 + y_dir), #(x2, y2)]
-      [path1, path2]
-    }
-
     2, 1 -> {
       // Length 3: Two moves in x, one in y
       let path1 = [#(x1 + x_dir, y1), #(x1 + x_dir * 2, y1), #(x2, y2)]
@@ -1325,43 +1347,22 @@ fn multi_axis_paths(x1: Int, y1: Int, x2: Int, y2: Int) {
   })
 }
 
-fn remove_invalid_paths(
-  paths: List(List(Coords)),
-  start_square: Square,
-  board: Board,
-) {
-  list.filter(paths, fn(path) {
-    list.all(path, fn(coord) {
-      let square = retrieve_square(board, coord)
-      square.piece == None
-    })
-    && is_path_valid(board, path, start_square, True)
-  })
+/// Converts a piece color to its string representation
+pub fn piece_color_to_string(piece_color: PieceColor) {
+  case piece_color {
+    Gold -> "gold"
+    Silver -> "silver"
+  }
 }
 
-fn is_path_valid(
-  board: Board,
-  path: List(Coords),
-  actual_square: Square,
-  last_result: Bool,
-) {
-  use <- bool.guard(path == [], last_result)
-  use <- bool.guard(!last_result, False)
-
-  let assert [target_coords, ..rest] = path
-  let assert Some(piece) = actual_square.piece
-
-  let updated_board =
-    update_board(board, [
-      Square(x: actual_square.x, y: actual_square.y, piece: None),
-      Square(x: target_coords.0, y: target_coords.1, piece: Some(piece)),
-    ])
-
-  let target_square = retrieve_square(updated_board, target_coords)
-
-  let last_result =
-    !is_piece_captured(updated_board, target_square)
-    && !is_piece_frozen(updated_board, piece, target_square)
-
-  is_path_valid(updated_board, rest, target_square, last_result)
+/// Converts a piece kind to its string representation
+pub fn piece_kind_to_string(piece_kind: PieceKind) {
+  case piece_kind {
+    Elephant -> "elephant"
+    Camel -> "camel"
+    Horse -> "horse"
+    Dog -> "dog"
+    Cat -> "cat"
+    Rabbit -> "rabbit"
+  }
 }
