@@ -1,7 +1,7 @@
 # Zereth
 
 > [!WARNING]
-> This project is on early stage of development and ready for production use.
+> This project is on early stage of development and not ready for production use.
 
 
 ## Development
