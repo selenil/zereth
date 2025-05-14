@@ -68,6 +68,14 @@ pub type RepositionType {
   Push
 }
 
+/// Represents the nature of a valid coord for a piece
+/// 'GoodToGo' means the piece could safelly to go to that coord
+/// 'Danger' means the piece will be captured if it moves to that coord
+pub type ValidCoordsKind {
+  GoodToGo
+  Danger
+}
+
 /// Board coordinates as a tuple of x,y positions
 pub type Coords =
   #(Int, Int)
@@ -405,6 +413,10 @@ pub fn is_movement_legal(
       #(source_square.x, source_square.y),
       piece,
     )
+    |> list.map(fn(tuple) {
+      let #(valid_coord, _kind) = tuple
+      valid_coord
+    })
   use <- bool.guard(
     !list.contains(valid_coords, #(target_square.x, target_square.y)),
     Error("Not a valid square square"),
@@ -1085,14 +1097,24 @@ pub fn valid_coords_for_piece(
   remaining_moves: Int,
   source_coords: Coords,
   piece: Piece,
-) -> List(Coords) {
+) -> List(#(Coords, ValidCoordsKind)) {
   let visited = set.new()
   let source_square = retrieve_square(board, source_coords)
 
   possible_moves(source_square, remaining_moves, visited, board, piece)
-  |> list.filter(fn(coord) {
-    let square = retrieve_square(board, coord)
-    square.piece == None
+  |> list.map(fn(pos) {
+    let simulated_board =
+      update_board(board, [
+        Square(x: source_square.x, y: source_square.y, piece: None),
+        Square(x: pos.0, y: pos.1, piece: Some(piece)),
+      ])
+
+    case
+      is_piece_captured(simulated_board, retrieve_square(simulated_board, pos))
+    {
+      True -> #(pos, Danger)
+      False -> #(pos, GoodToGo)
+    }
   })
   // TODO: Fix this, it's not working properly and marks invalid
   // paths as valid, probably because the pathfinding algorithm

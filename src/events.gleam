@@ -89,6 +89,12 @@ pub fn process_msg(model: model.Model, msg: Msg) {
           }
         }
         Some(coords), _ -> {
+          let coords =
+            list.map(coords, fn(tuple) {
+              let #(pos, _kind) = tuple
+              pos
+            })
+
           case list.contains(coords, #(square.x, square.y)) {
             True -> {
               model.Model(..model, opting_square: Some(square))

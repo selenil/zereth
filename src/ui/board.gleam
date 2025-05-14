@@ -125,7 +125,9 @@ fn render_square(
   opting_square opting_square: Option(game_engine.Square),
   opting_piece opting_piece: Option(game_engine.Piece),
   enemy_opting_piece enemy_opting_piece: Option(game_engine.Piece),
-  valid_coords valid_coords: Option(List(game_engine.Coords)),
+  valid_coords valid_coords: Option(
+    List(#(game_engine.Coords, game_engine.ValidCoordsKind)),
+  ),
 ) {
   let piece_additional_classes = case
     square.piece,
@@ -161,10 +163,21 @@ fn render_square(
   }
 
   let valid_coords_class = case valid_coords {
-    Some(coords) ->
-      case list.any(coords, fn(c) { c.0 == square.x && c.1 == square.y }) {
-        True -> attribute.class("valid")
-        False -> attribute.none()
+    Some(valid_coords) ->
+      case
+        list.find(valid_coords, fn(tuple) {
+          let #(pos, _kind) = tuple
+          pos.0 == square.x && pos.1 == square.y
+        })
+      {
+        Ok(coords) -> {
+          let #(_, kind) = coords
+          case kind {
+            game_engine.GoodToGo -> attribute.class("valid good-to-go")
+            game_engine.Danger -> attribute.class("valid danger")
+          }
+        }
+        Error(_) -> attribute.none()
       }
     None -> attribute.none()
   }

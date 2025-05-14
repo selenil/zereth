@@ -4,7 +4,8 @@
   --square-color-even: #c19a6b;
   --board-bg-color: #f3d5b8;
   --trap-square-color: #b76b5a;
-  --valid-square-color: #32cd32;
+  --valid-good-to-go-square-color: #32cd32;
+  --valid-danger-square-color: #ff0000;
 
   --board-width: 730px;
   --board-height: 730px;
@@ -202,8 +203,15 @@ body {
 }
 
 .square.valid {
-  box-shadow: inset 0 0 0 3px var(--valid-square-color);
   transition: all 0.2s ease-in-out;
+}
+
+.square.valid.good-to-go {
+  box-shadow: inset 0 0 0 3px var(--valid-good-to-go-square-color);
+}
+
+.square.valid.danger {
+  box-shadow: inset 0 0 0 3px var(--valid-danger-square-color);
 }
 
 .square.drag-over {
