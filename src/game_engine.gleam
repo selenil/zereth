@@ -1101,24 +1101,26 @@ pub fn valid_coords_for_piece(
   let source_square = retrieve_square(board, source_coords)
   let #(x1, y1) = source_coords
 
-  let all_possible_coords = possible_moves(source_square, remaining_moves, set.new(), board, piece)
-  
+  let all_possible_coords =
+    possible_moves(source_square, remaining_moves, set.new(), board, piece)
+
   // For each possible coordinate, check if there's at least one valid path to reach it
   all_possible_coords
   |> list.filter_map(fn(target_coords) {
     let #(x2, y2) = target_coords
     let is_diagonal = int.absolute_value(x1 - x2) == int.absolute_value(y1 - y2)
-    
+
     let paths = case is_diagonal {
       True -> diagonal_paths(x1, y1, x2, y2)
-      False -> case x1 == x2 || y1 == y2 {
-        True -> [ortogonal_path(x1, x2, y1, y2)]
-        False -> multi_axis_paths(x1, y1, x2, y2)
-      }
+      False ->
+        case x1 == x2 || y1 == y2 {
+          True -> [ortogonal_path(x1, x2, y1, y2)]
+          False -> multi_axis_paths(x1, y1, x2, y2)
+        }
     }
-    
+
     let valid_paths = remove_invalid_paths(paths, source_square, board)
-    
+
     case list.is_empty(valid_paths) {
       True -> Error(Nil)
       False -> {
@@ -1128,7 +1130,12 @@ pub fn valid_coords_for_piece(
             Square(x: target_coords.0, y: target_coords.1, piece: Some(piece)),
           ])
 
-        case is_piece_captured(simulated_board, retrieve_square(simulated_board, target_coords)) {
+        case
+          is_piece_captured(
+            simulated_board,
+            retrieve_square(simulated_board, target_coords),
+          )
+        {
           True -> Ok(#(target_coords, Danger))
           False -> Ok(#(target_coords, GoodToGo))
         }
@@ -1191,11 +1198,15 @@ fn is_path_valid(board: Board, path: List(Coords), actual_square: Square) {
     let assert Some(current_piece) = current_square.piece
     let target_square = retrieve_square(current_board, target_coords)
 
-    use <- bool.guard(target_square.piece != None, #(False, current_board, current_square))
+    use <- bool.guard(target_square.piece != None, #(
+      False,
+      current_board,
+      current_square,
+    ))
 
     use <- bool.guard(
       is_rabbit_moving_backwards(current_piece, current_square, target_square),
-      #(False, current_board, current_square)
+      #(False, current_board, current_square),
     )
 
     // Simulate the move and check if the piece 
@@ -1203,19 +1214,23 @@ fn is_path_valid(board: Board, path: List(Coords), actual_square: Square) {
     let intermediate_board =
       update_board(current_board, [
         Square(x: current_square.x, y: current_square.y, piece: None),
-        Square(x: target_coords.0, y: target_coords.1, piece: Some(current_piece)),
+        Square(
+          x: target_coords.0,
+          y: target_coords.1,
+          piece: Some(current_piece),
+        ),
       ])
 
     let new_target_square = retrieve_square(intermediate_board, target_coords)
 
     use <- bool.guard(
       is_piece_frozen(intermediate_board, current_piece, new_target_square),
-      #(False, intermediate_board, current_square)
+      #(False, intermediate_board, current_square),
     )
 
     use <- bool.guard(
       is_piece_captured(intermediate_board, new_target_square),
-      #(False, intermediate_board, current_square)
+      #(False, intermediate_board, current_square),
     )
 
     #(True, intermediate_board, new_target_square)
