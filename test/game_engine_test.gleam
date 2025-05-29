@@ -26,6 +26,30 @@ fn setup_test_game(pieces: List(#(Piece, #(Int, Int)))) -> Game {
 }
 
 // Basic game setup and initialization tests
+pub fn new_game_test() {
+  let game = game_engine.new_game()
+  should.equal(game.current_player_color, Gold)
+  should.equal(game.remaining_moves, 0)
+  should.be_true(game.positioning)
+  should.be_false(game.win)
+  should.equal(game.history, [])
+  should.equal(game.previous_board, None)
+}
+
+pub fn new_debug_game_test() {
+  let game = game_engine.new_debug_game()
+  should.equal(game.current_player_color, Gold)
+  should.equal(game.remaining_moves, 4)
+  should.be_false(game.positioning)
+  should.be_false(game.win)
+  should.equal(game.history, [])
+  should.equal(game.previous_board, None)
+  
+  // Check that debug board has pieces placed
+  let elephant_square = game_engine.retrieve_square(game.board, #(1, 4))
+  should.equal(elephant_square.piece, Some(Piece(Elephant, Gold, 1)))
+}
+
 pub fn is_positioning_initial_board_test() {
   let game = game_engine.new_game()
   should.be_true(game_engine.is_positioning(game.board))
@@ -70,6 +94,464 @@ pub fn get_available_pieces_some_placed_test() {
 
   should.equal(list.length(available), 31)
   should.be_false(list.contains(available, elephant))
+}
+
+// Pass turn tests
+pub fn pass_turn_with_remaining_moves_test() {
+  let game = Game(..game_engine.new_game(), remaining_moves: 2)
+  let result = game_engine.pass_turn(game)
+  
+  should.equal(result.remaining_moves, 2)
+  should.equal(result.current_player_color, Gold)
+}
+
+pub fn pass_turn_no_remaining_moves_test() {
+  let game = Game(..game_engine.new_game(), remaining_moves: 0, current_player_color: Gold)
+  let result = game_engine.pass_turn(game)
+  
+  should.equal(result.remaining_moves, 4)
+  should.equal(result.current_player_color, Silver)
+  should.equal(result.previous_board, Some(game.board))
+}
+
+pub fn pass_turn_silver_to_gold_test() {
+  let game = Game(..game_engine.new_game(), remaining_moves: 0, current_player_color: Silver)
+  let result = game_engine.pass_turn(game)
+  
+  should.equal(result.remaining_moves, 4)
+  should.equal(result.current_player_color, Gold)
+}
+
+// Piece strength tests
+pub fn is_piece_stronger_elephant_vs_rabbit_test() {
+  let elephant = Piece(Elephant, Gold, 1)
+  let rabbit = Piece(Rabbit, Silver, 1)
+  
+  should.be_true(game_engine.is_piece_stronger(elephant, rabbit))
+  should.be_false(game_engine.is_piece_stronger(rabbit, elephant))
+}
+
+pub fn is_piece_stronger_same_pieces_test() {
+  let elephant1 = Piece(Elephant, Gold, 1)
+  let elephant2 = Piece(Elephant, Silver, 1)
+  
+  should.be_false(game_engine.is_piece_stronger(elephant1, elephant2))
+  should.be_false(game_engine.is_piece_stronger(elephant2, elephant1))
+}
+
+pub fn is_piece_stronger_hierarchy_test() {
+  let pieces = [
+    Piece(Elephant, Gold, 1),
+    Piece(Camel, Gold, 1),
+    Piece(Horse, Gold, 1),
+    Piece(Dog, Gold, 1),
+    Piece(Cat, Gold, 1),
+    Piece(Rabbit, Gold, 1),
+  ]
+  
+  // Test that each piece is stronger than all pieces after it
+  list.index_map(pieces, fn(piece1, i) {
+    list.drop(pieces, i + 1)
+    |> list.each(fn(piece2) {
+      should.be_true(game_engine.is_piece_stronger(piece1, piece2))
+    })
+  })
+}
+
+// Piece frozen tests
+pub fn is_piece_frozen_no_adjacent_pieces_test() {
+  let game = setup_test_game([#(Piece(Rabbit, Gold, 1), #(4, 4))])
+  let rabbit = Piece(Rabbit, Gold, 1)
+  let square = game_engine.retrieve_square_from_piece(game.board, rabbit)
+  
+  game_engine.is_piece_frozen(game.board, rabbit, square)
+  |> should.be_false()
+}
+
+pub fn is_piece_frozen_with_ally_test() {
+  let game = setup_test_game([
+    #(Piece(Rabbit, Gold, 1), #(4, 4)),
+    #(Piece(Cat, Gold, 1), #(4, 5)),
+    #(Piece(Dog, Silver, 1), #(5, 4)),
+  ])
+  let rabbit = Piece(Rabbit, Gold, 1)
+  let square = game_engine.retrieve_square_from_piece(game.board, rabbit)
+  
+  game_engine.is_piece_frozen(game.board, rabbit, square)
+  |> should.be_false()
+}
+
+pub fn is_piece_frozen_by_stronger_enemy_test() {
+  let game = setup_test_game([
+    #(Piece(Rabbit, Gold, 1), #(4, 4)),
+    #(Piece(Dog, Silver, 1), #(5, 4)),
+  ])
+  let rabbit = Piece(Rabbit, Gold, 1)
+  let square = game_engine.retrieve_square_from_piece(game.board, rabbit)
+  
+  game_engine.is_piece_frozen(game.board, rabbit, square)
+  |> should.be_true()
+}
+
+pub fn is_piece_frozen_by_weaker_enemy_test() {
+  let game = setup_test_game([
+    #(Piece(Dog, Gold, 1), #(4, 4)),
+    #(Piece(Rabbit, Silver, 1), #(5, 4)),
+  ])
+  let dog = Piece(Dog, Gold, 1)
+  let square = game_engine.retrieve_square_from_piece(game.board, dog)
+  
+  game_engine.is_piece_frozen(game.board, dog, square)
+  |> should.be_false()
+}
+
+// Rabbit backwards movement tests
+pub fn is_rabbit_moving_backwards_gold_test() {
+  let rabbit = Piece(Rabbit, Gold, 1)
+  let source = game_engine.retrieve_square(game_engine.new_game().board, #(4, 4))
+  let target_forward = game_engine.retrieve_square(game_engine.new_game().board, #(5, 4))
+  let target_backward = game_engine.retrieve_square(game_engine.new_game().board, #(3, 4))
+  
+  should.be_false(game_engine.is_rabbit_moving_backwards(rabbit, source, target_forward))
+  should.be_true(game_engine.is_rabbit_moving_backwards(rabbit, source, target_backward))
+}
+
+pub fn is_rabbit_moving_backwards_silver_test() {
+  let rabbit = Piece(Rabbit, Silver, 1)
+  let source = game_engine.retrieve_square(game_engine.new_game().board, #(4, 4))
+  let target_forward = game_engine.retrieve_square(game_engine.new_game().board, #(3, 4))
+  let target_backward = game_engine.retrieve_square(game_engine.new_game().board, #(5, 4))
+  
+  should.be_false(game_engine.is_rabbit_moving_backwards(rabbit, source, target_forward))
+  should.be_true(game_engine.is_rabbit_moving_backwards(rabbit, source, target_backward))
+}
+
+pub fn is_rabbit_moving_backwards_non_rabbit_test() {
+  let dog = Piece(Dog, Gold, 1)
+  let source = game_engine.retrieve_square(game_engine.new_game().board, #(4, 4))
+  let target = game_engine.retrieve_square(game_engine.new_game().board, #(3, 4))
+  
+  should.be_false(game_engine.is_rabbit_moving_backwards(dog, source, target))
+}
+
+// Movement legal tests
+pub fn is_movement_legal_no_source_piece_test() {
+  let game = game_engine.new_game()
+  let source = game_engine.retrieve_square(game.board, #(4, 4))
+  let target = game_engine.retrieve_square(game.board, #(4, 5))
+  
+  let result = game_engine.is_movement_legal(game.board, 4, source, target)
+  should.be_error(result)
+}
+
+pub fn is_movement_legal_occupied_target_test() {
+  let game = setup_test_game([
+    #(Piece(Rabbit, Gold, 1), #(4, 4)),
+    #(Piece(Cat, Gold, 1), #(4, 5)),
+  ])
+  let source = game_engine.retrieve_square(game.board, #(4, 4))
+  let target = game_engine.retrieve_square(game.board, #(4, 5))
+  
+  let result = game_engine.is_movement_legal(game.board, 4, source, target)
+  should.be_error(result)
+}
+
+// Move piece tests
+pub fn move_piece_simple_valid_move_test() {
+  let game = Game(..setup_test_game([#(Piece(Rabbit, Gold, 1), #(4, 4))]), remaining_moves: 4)
+  let rabbit = Piece(Rabbit, Gold, 1)
+  
+  let result = game_engine.move_piece(game, rabbit, #(4, 5))
+  should.be_ok(result)
+  
+  let assert Ok(updated_game) = result
+  should.equal(updated_game.remaining_moves, 3)
+  
+  let target_square = game_engine.retrieve_square(updated_game.board, #(4, 5))
+  should.equal(target_square.piece, Some(rabbit))
+  
+  let source_square = game_engine.retrieve_square(updated_game.board, #(4, 4))
+  should.equal(source_square.piece, None)
+}
+
+pub fn move_piece_not_enough_moves_test() {
+  let game = Game(..setup_test_game([#(Piece(Rabbit, Gold, 1), #(4, 4))]), remaining_moves: 1)
+  let rabbit = Piece(Rabbit, Gold, 1)
+  
+  let result = game_engine.move_piece(game, rabbit, #(4, 6))
+  should.be_error(result)
+}
+
+pub fn move_piece_frozen_piece_test() {
+  let game = Game(..setup_test_game([
+    #(Piece(Rabbit, Gold, 1), #(4, 4)),
+    #(Piece(Dog, Silver, 1), #(5, 4)),
+  ]), remaining_moves: 4)
+  let rabbit = Piece(Rabbit, Gold, 1)
+  
+  let result = game_engine.move_piece(game, rabbit, #(4, 5))
+  should.be_error(result)
+}
+
+pub fn move_piece_rabbit_backwards_test() {
+  let game = Game(..setup_test_game([#(Piece(Rabbit, Gold, 1), #(4, 4))]), remaining_moves: 4)
+  let rabbit = Piece(Rabbit, Gold, 1)
+  
+  let result = game_engine.move_piece(game, rabbit, #(3, 4))
+  should.be_error(result)
+}
+
+// Reposition piece tests
+pub fn reposition_piece_valid_pull_test() {
+  let game = Game(..setup_test_game([
+    #(Piece(Dog, Gold, 1), #(4, 4)),
+    #(Piece(Rabbit, Silver, 1), #(5, 4)),
+  ]), remaining_moves: 4)
+  let dog = Piece(Dog, Gold, 1)
+  let rabbit = Piece(Rabbit, Silver, 1)
+  
+  let result = game_engine.reposition_piece(game, dog, rabbit, #(4, 5))
+  should.be_ok(result)
+  
+  let assert Ok(updated_game) = result
+  should.equal(updated_game.remaining_moves, 2)
+}
+
+pub fn reposition_piece_valid_push_test() {
+  let game = Game(..setup_test_game([
+    #(Piece(Dog, Gold, 1), #(4, 4)),
+    #(Piece(Rabbit, Silver, 1), #(5, 4)),
+  ]), remaining_moves: 4)
+  let dog = Piece(Dog, Gold, 1)
+  let rabbit = Piece(Rabbit, Silver, 1)
+  
+  let result = game_engine.reposition_piece(game, dog, rabbit, #(6, 4))
+  should.be_ok(result)
+  
+  let assert Ok(updated_game) = result
+  should.equal(updated_game.remaining_moves, 2)
+}
+
+pub fn reposition_piece_not_enough_moves_test() {
+  let game = Game(..setup_test_game([
+    #(Piece(Dog, Gold, 1), #(4, 4)),
+    #(Piece(Rabbit, Silver, 1), #(5, 4)),
+  ]), remaining_moves: 1)
+  let dog = Piece(Dog, Gold, 1)
+  let rabbit = Piece(Rabbit, Silver, 1)
+  
+  let result = game_engine.reposition_piece(game, dog, rabbit, #(4, 5))
+  should.be_error(result)
+}
+
+pub fn reposition_piece_same_color_test() {
+  let game = Game(..setup_test_game([
+    #(Piece(Dog, Gold, 1), #(4, 4)),
+    #(Piece(Rabbit, Gold, 1), #(5, 4)),
+  ]), remaining_moves: 4)
+  let dog = Piece(Dog, Gold, 1)
+  let rabbit = Piece(Rabbit, Gold, 1)
+  
+  let result = game_engine.reposition_piece(game, dog, rabbit, #(4, 5))
+  should.be_error(result)
+}
+
+pub fn reposition_piece_weak_stronger_than_strong_test() {
+  let game = Game(..setup_test_game([
+    #(Piece(Rabbit, Gold, 1), #(4, 4)),
+    #(Piece(Dog, Silver, 1), #(5, 4)),
+  ]), remaining_moves: 4)
+  let rabbit = Piece(Rabbit, Gold, 1)
+  let dog = Piece(Dog, Silver, 1)
+  
+  let result = game_engine.reposition_piece(game, rabbit, dog, #(4, 5))
+  should.be_error(result)
+}
+
+// Capture tests
+pub fn perform_captures_piece_on_trap_no_allies_test() {
+  let game = setup_test_game([#(Piece(Rabbit, Gold, 1), #(3, 3))])
+  let captured_game = game_engine.perform_captures(game)
+  
+  let trap_square = game_engine.retrieve_square(captured_game.board, #(3, 3))
+  should.equal(trap_square.piece, None)
+  
+  // Check history contains capture record
+  should.equal(list.length(captured_game.history), 1)
+}
+
+pub fn perform_captures_piece_on_trap_with_ally_test() {
+  let game = setup_test_game([
+    #(Piece(Rabbit, Gold, 1), #(3, 3)),
+    #(Piece(Cat, Gold, 1), #(3, 4)),
+  ])
+  let captured_game = game_engine.perform_captures(game)
+  
+  let trap_square = game_engine.retrieve_square(captured_game.board, #(3, 3))
+  should.equal(trap_square.piece, Some(Piece(Rabbit, Gold, 1)))
+  
+  // Check no capture in history
+  should.equal(list.length(captured_game.history), 0)
+}
+
+pub fn perform_captures_no_piece_on_trap_test() {
+  let game = setup_test_game([#(Piece(Rabbit, Gold, 1), #(4, 4))])
+  let captured_game = game_engine.perform_captures(game)
+  
+  // Board should remain unchanged
+  should.equal(captured_game.board, game.board)
+  should.equal(list.length(captured_game.history), 0)
+}
+
+pub fn perform_captures_multiple_traps_test() {
+  let game = setup_test_game([
+    #(Piece(Rabbit, Gold, 1), #(3, 3)),
+    #(Piece(Cat, Silver, 1), #(6, 6)),
+  ])
+  let captured_game = game_engine.perform_captures(game)
+  
+  // Both pieces should be captured
+  let trap1_square = game_engine.retrieve_square(captured_game.board, #(3, 3))
+  should.equal(trap1_square.piece, None)
+  
+  let trap2_square = game_engine.retrieve_square(captured_game.board, #(6, 6))
+  should.equal(trap2_square.piece, None)
+  
+  // Check history contains both capture records
+  should.equal(list.length(captured_game.history), 2)
+}
+
+// Undo move tests
+pub fn undo_last_move_simple_move_test() {
+  let initial_game = Game(..setup_test_game([#(Piece(Rabbit, Gold, 1), #(4, 4))]), remaining_moves: 4)
+  let rabbit = Piece(Rabbit, Gold, 1)
+  
+  let assert Ok(moved_game) = game_engine.move_piece(initial_game, rabbit, #(4, 5))
+  let undone_game = game_engine.undo_last_move(moved_game)
+  
+  should.equal(undone_game.remaining_moves, 4)
+  
+  let source_square = game_engine.retrieve_square(undone_game.board, #(4, 4))
+  should.equal(source_square.piece, Some(rabbit))
+  
+  let target_square = game_engine.retrieve_square(undone_game.board, #(4, 5))
+  should.equal(target_square.piece, None)
+}
+
+pub fn undo_last_move_reposition_test() {
+  // Test undoing a reposition move instead of a capture
+  let game = Game(..setup_test_game([
+    #(Piece(Dog, Gold, 1), #(4, 4)),
+    #(Piece(Rabbit, Silver, 1), #(5, 4)),
+  ]), remaining_moves: 4)
+  let dog = Piece(Dog, Gold, 1)
+  let rabbit = Piece(Rabbit, Silver, 1)
+  
+  // Perform a reposition (pull)
+  let assert Ok(repositioned_game) = game_engine.reposition_piece(game, dog, rabbit, #(4, 5))
+  
+  should.equal(repositioned_game.remaining_moves, 2)
+  should.be_true(list.length(repositioned_game.history) > 0)
+  
+  let undone_game = game_engine.undo_last_move(repositioned_game)
+  
+  let dog_square = game_engine.retrieve_square(undone_game.board, #(4, 4))
+  should.equal(dog_square.piece, Some(dog))
+  
+  let rabbit_square = game_engine.retrieve_square(undone_game.board, #(5, 4))
+  should.equal(rabbit_square.piece, Some(rabbit))
+  
+  should.equal(undone_game.remaining_moves, 4)
+}
+
+// Adjacent coords tests
+pub fn adjacent_coords_center_test() {
+  let coords = #(4, 4)
+  let adjacent = game_engine.adjacent_coords(coords)
+  
+  should.equal(list.length(adjacent), 4)
+  should.be_true(list.contains(adjacent, #(5, 4)))
+  should.be_true(list.contains(adjacent, #(3, 4)))
+  should.be_true(list.contains(adjacent, #(4, 5)))
+  should.be_true(list.contains(adjacent, #(4, 3)))
+}
+
+pub fn adjacent_coords_corner_test() {
+  let coords = #(1, 1)
+  let adjacent = game_engine.adjacent_coords(coords)
+  
+  should.equal(list.length(adjacent), 2)
+  should.be_true(list.contains(adjacent, #(2, 1)))
+  should.be_true(list.contains(adjacent, #(1, 2)))
+}
+
+pub fn adjacent_coords_edge_test() {
+  let coords = #(1, 4)
+  let adjacent = game_engine.adjacent_coords(coords)
+  
+  should.equal(list.length(adjacent), 3)
+  should.be_true(list.contains(adjacent, #(2, 4)))
+  should.be_true(list.contains(adjacent, #(1, 5)))
+  should.be_true(list.contains(adjacent, #(1, 3)))
+}
+
+// Adjacent pieces tests
+pub fn adjacent_pieces_with_pieces_test() {
+  let game = setup_test_game([
+    #(Piece(Rabbit, Gold, 1), #(4, 4)),
+    #(Piece(Cat, Gold, 1), #(5, 4)),
+    #(Piece(Dog, Silver, 1), #(4, 5)),
+  ])
+  
+  let adjacent = game_engine.adjacent_pieces(game.board, #(4, 4))
+  
+  should.equal(list.length(adjacent), 2)
+  should.be_true(list.contains(adjacent, Piece(Cat, Gold, 1)))
+  should.be_true(list.contains(adjacent, Piece(Dog, Silver, 1)))
+}
+
+pub fn adjacent_pieces_no_pieces_test() {
+  let game = setup_test_game([#(Piece(Rabbit, Gold, 1), #(4, 4))])
+  
+  let adjacent = game_engine.adjacent_pieces(game.board, #(4, 4))
+  
+  should.equal(list.length(adjacent), 0)
+}
+
+// Valid coords for piece tests
+pub fn valid_coords_for_piece_basic_test() {
+  let game = setup_test_game([#(Piece(Rabbit, Gold, 1), #(4, 4))])
+  let rabbit = Piece(Rabbit, Gold, 1)
+  
+  let valid_coords = game_engine.valid_coords_for_piece(game.board, 1, #(4, 4), rabbit)
+  
+  should.be_true(list.length(valid_coords) > 0)
+  // Should include adjacent empty squares
+  should.be_true(list.any(valid_coords, fn(coord_tuple) {
+    let #(coord, _kind) = coord_tuple
+    coord == #(5, 4) || coord == #(4, 5) || coord == #(3, 4) || coord == #(4, 3)
+  }))
+}
+
+// Retrieve square tests
+pub fn retrieve_square_valid_coords_test() {
+  let game = game_engine.new_game()
+  let square = game_engine.retrieve_square(game.board, #(4, 4))
+  
+  should.equal(square.x, 4)
+  should.equal(square.y, 4)
+  should.equal(square.piece, None)
+}
+
+pub fn retrieve_square_from_piece_test() {
+  let game = setup_test_game([#(Piece(Rabbit, Gold, 1), #(4, 4))])
+  let rabbit = Piece(Rabbit, Gold, 1)
+  
+  let square = game_engine.retrieve_square_from_piece(game.board, rabbit)
+  
+  should.equal(square.x, 4)
+  should.equal(square.y, 4)
+  should.equal(square.piece, Some(rabbit))
 }
 
 // Ortogonal path tests
@@ -174,6 +656,15 @@ pub fn multi_axis_paths_4_moves_test() {
   ])
 }
 
+pub fn multi_axis_paths_invalid_length_test() {
+  // Test paths that are too long or invalid
+  game_engine.multi_axis_paths(1, 1, 6, 2)
+  |> should.equal([])
+  
+  game_engine.multi_axis_paths(1, 1, 2, 6)
+  |> should.equal([])
+}
+
 // Piece placement tests
 pub fn place_piece_valid_gold_territory_test() {
   let game = setup_test_game([])
@@ -276,12 +767,38 @@ pub fn win_by_rabbit_reaching_opposite_end_test() {
   should.be_true(win_game.win)
 }
 
+pub fn win_by_rabbit_reaching_opposite_end_silver_test() {
+  let game =
+    setup_test_game([
+      #(Piece(Rabbit, Silver, 1), #(1, 4)),
+      // Silver rabbit on Gold's end
+    ])
+
+  let win_game = game_engine.check_win(game)
+  should.be_true(win_game.win)
+}
+
 pub fn win_by_capturing_all_pieces_test() {
   // Setup game with only one Silver piece which will be captured
   let game =
     setup_test_game([
       #(Piece(Rabbit, Silver, 1), #(3, 3)),
       // Silver rabbit on trap
+    ])
+
+  let captured_game = game_engine.perform_captures(game)
+  let win_game = game_engine.check_win(captured_game)
+  should.be_true(win_game.win)
+}
+
+pub fn win_by_capturing_all_gold_pieces_test() {
+  // Setup game with only one Gold piece which will be captured
+  let game =
+    setup_test_game([
+      #(Piece(Rabbit, Gold, 1), #(3, 3)),
+      // Gold rabbit on trap
+      #(Piece(Cat, Silver, 1), #(4, 4)),
+      // Silver piece to avoid empty board
     ])
 
   let captured_game = game_engine.perform_captures(game)
