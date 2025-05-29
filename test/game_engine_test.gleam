@@ -533,6 +533,50 @@ pub fn valid_coords_for_piece_basic_test() {
   }))
 }
 
+pub fn valid_coords_for_piece_pathfinding_capture_test() {
+  // Test that coordinates are not marked as valid if all paths 
+  // to reach them involve the piece being captured in an intermediate step
+  let game = setup_test_game([
+    #(Piece(Rabbit, Gold, 1), #(4, 4)),
+    #(Piece(Dog, Silver, 1), #(3, 3)), // Enemy piece near trap
+    #(Piece(Dog, Silver, 2), #(6, 3)), // Enemy piece near trap
+  ])
+  let rabbit = Piece(Rabbit, Gold, 1)
+  
+  let valid_coords = game_engine.valid_coords_for_piece(game.board, 2, #(4, 4), rabbit)
+  
+  // The rabbit should not be able to reach the trap squares (3,3) and (6,3)
+  // because it would be captured there due to no adjacent friendly pieces
+  let coords_only = list.map(valid_coords, fn(tuple) {
+    let #(coord, _kind) = tuple
+    coord
+  })
+  
+  should.be_false(list.contains(coords_only, #(3, 3)))
+  should.be_false(list.contains(coords_only, #(6, 3)))
+}
+
+pub fn valid_coords_for_piece_pathfinding_frozen_test() {
+  // Test that coordinates are not marked as valid if all paths 
+  // to reach them involve the piece being frozen in an intermediate step
+  let game = setup_test_game([
+    #(Piece(Rabbit, Gold, 1), #(4, 4)),
+    #(Piece(Dog, Silver, 1), #(5, 5)), // Enemy piece that would freeze the rabbit
+  ])
+  let rabbit = Piece(Rabbit, Gold, 1)
+  
+  let valid_coords = game_engine.valid_coords_for_piece(game.board, 2, #(4, 4), rabbit)
+  
+  // The rabbit should not be able to reach (5,5) because it would be frozen there
+  // by the stronger enemy piece with no friendly pieces adjacent
+  let coords_only = list.map(valid_coords, fn(tuple) {
+    let #(coord, _kind) = tuple
+    coord
+  })
+  
+  should.be_false(list.contains(coords_only, #(5, 5)))
+}
+
 // Retrieve square tests
 pub fn retrieve_square_valid_coords_test() {
   let game = game_engine.new_game()

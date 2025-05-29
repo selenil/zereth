@@ -3042,6 +3042,71 @@ function adjacent_pieces(board2, coords) {
     }
   );
 }
+function possible_moves(start3, remaining_moves, visited, board2, piece) {
+  return guard(
+    remaining_moves === 0,
+    toList([]),
+    () => {
+      let directions = toList([[0, 1], [0, -1], [1, 0], [-1, 0]]);
+      let _block;
+      let _pipe = directions;
+      let _pipe$1 = map(
+        _pipe,
+        (dir) => {
+          return [start3.x + dir[0], start3.y + dir[1]];
+        }
+      );
+      _block = filter(
+        _pipe$1,
+        (pos) => {
+          return guard(
+            contains2(visited, pos),
+            false,
+            () => {
+              return guard(
+                pos[0] < 1 || pos[0] > 8 || pos[1] < 1 || pos[1] > 8,
+                false,
+                () => {
+                  return guard(
+                    !isEqual(retrieve_square(board2, pos).piece, new None()),
+                    false,
+                    () => {
+                      return true;
+                    }
+                  );
+                }
+              );
+            }
+          );
+        }
+      );
+      let next_positions = _block;
+      let new_visited = insert2(visited, [start3.x, start3.y]);
+      let _block$1;
+      let _pipe$2 = next_positions;
+      _block$1 = flat_map(
+        _pipe$2,
+        (pos) => {
+          return possible_moves(
+            retrieve_square(board2, pos),
+            remaining_moves - 1,
+            new_visited,
+            board2,
+            piece
+          );
+        }
+      );
+      let further_positions = _block$1;
+      return fold(
+        further_positions,
+        next_positions,
+        (acc, path) => {
+          return prepend(path, acc);
+        }
+      );
+    }
+  );
+}
 function ortogonal_path(x1, x2, y1, y2) {
   let is_x_axis = x1 === x2;
   let dx = x2 - x1;
@@ -3124,7 +3189,7 @@ function diagonal_paths(x1, y1, x2, y2) {
     throw makeError(
       "panic",
       "game_engine",
-      1297,
+      1302,
       "diagonal_paths",
       "Not valid",
       {}
@@ -3675,54 +3740,71 @@ function reposition_piece(game, strong_piece, weak_piece, target_coords) {
     }
   );
 }
-function possible_moves(start3, remaining_moves, visited, board2, piece) {
-  return guard(
-    remaining_moves === 0,
-    toList([]),
-    () => {
-      let directions = toList([[0, 1], [0, -1], [1, 0], [-1, 0]]);
-      let _block;
-      let _pipe = directions;
-      let _pipe$1 = map(
-        _pipe,
-        (dir) => {
-          return [start3.x + dir[0], start3.y + dir[1]];
-        }
-      );
-      _block = filter(
-        _pipe$1,
-        (pos) => {
+function is_path_valid(board2, path, actual_square) {
+  let $ = fold(
+    path,
+    [true, board2, actual_square],
+    (acc, target_coords) => {
+      let state = acc[0];
+      let current_board = acc[1];
+      let current_square = acc[2];
+      return guard(
+        !state,
+        [false, current_board, current_square],
+        () => {
+          let $1 = current_square.piece;
+          if (!($1 instanceof Some)) {
+            throw makeError(
+              "let_assert",
+              "game_engine",
+              1191,
+              "",
+              "Pattern match failed, no pattern matched the value.",
+              { value: $1 }
+            );
+          }
+          let current_piece = $1[0];
+          let target_square = retrieve_square(current_board, target_coords);
           return guard(
-            contains2(visited, pos),
-            false,
+            !isEqual(target_square.piece, new None()),
+            [false, current_board, current_square],
             () => {
               return guard(
-                pos[0] < 1 || pos[0] > 8 || pos[1] < 1 || pos[1] > 8,
-                false,
+                is_rabbit_moving_backwards(
+                  current_piece,
+                  current_square,
+                  target_square
+                ),
+                [false, current_board, current_square],
                 () => {
+                  let intermediate_board = update_board(
+                    current_board,
+                    toList([
+                      new Square(current_square.x, current_square.y, new None()),
+                      new Square(
+                        target_coords[0],
+                        target_coords[1],
+                        new Some(current_piece)
+                      )
+                    ])
+                  );
+                  let new_target_square = retrieve_square(
+                    intermediate_board,
+                    target_coords
+                  );
                   return guard(
-                    !isEqual(retrieve_square(board2, pos).piece, new None()),
-                    false,
+                    is_piece_frozen(
+                      intermediate_board,
+                      current_piece,
+                      new_target_square
+                    ),
+                    [false, intermediate_board, current_square],
                     () => {
                       return guard(
-                        is_piece_frozen(
-                          board2,
-                          piece,
-                          retrieve_square(board2, pos)
-                        ),
-                        false,
+                        is_piece_captured(intermediate_board, new_target_square),
+                        [false, intermediate_board, current_square],
                         () => {
-                          return guard(
-                            is_rabbit_moving_backwards(
-                              piece,
-                              start3,
-                              retrieve_square(board2, pos)
-                            ),
-                            false,
-                            () => {
-                              return true;
-                            }
-                          );
+                          return [true, intermediate_board, new_target_square];
                         }
                       );
                     }
@@ -3733,181 +3815,10 @@ function possible_moves(start3, remaining_moves, visited, board2, piece) {
           );
         }
       );
-      let next_positions = _block;
-      let new_visited = insert2(visited, [start3.x, start3.y]);
-      let _block$1;
-      let _pipe$2 = next_positions;
-      _block$1 = flat_map(
-        _pipe$2,
-        (pos) => {
-          return possible_moves(
-            retrieve_square(board2, pos),
-            remaining_moves - 1,
-            new_visited,
-            board2,
-            piece
-          );
-        }
-      );
-      let further_positions = _block$1;
-      return fold(
-        further_positions,
-        next_positions,
-        (acc, path) => {
-          return prepend(path, acc);
-        }
-      );
     }
   );
-}
-function valid_coords_for_piece(board2, remaining_moves, source_coords, piece) {
-  let visited = new$2();
-  let source_square = retrieve_square(board2, source_coords);
-  let _pipe = possible_moves(
-    source_square,
-    remaining_moves,
-    visited,
-    board2,
-    piece
-  );
-  return map(
-    _pipe,
-    (pos) => {
-      let simulated_board = update_board(
-        board2,
-        toList([
-          new Square(source_square.x, source_square.y, new None()),
-          new Square(pos[0], pos[1], new Some(piece))
-        ])
-      );
-      let $ = is_piece_captured(
-        simulated_board,
-        retrieve_square(simulated_board, pos)
-      );
-      if ($) {
-        return [pos, new Danger()];
-      } else {
-        return [pos, new GoodToGo()];
-      }
-    }
-  );
-}
-function is_movement_legal(board2, remaining_moves, source_square, target_square) {
-  return guard(
-    isEqual(source_square.piece, new None()),
-    new Error("Not a piece in the source square"),
-    () => {
-      return guard(
-        !isEqual(target_square.piece, new None()),
-        new Error("Already a piece in the target square"),
-        () => {
-          let $ = source_square.piece;
-          if (!($ instanceof Some)) {
-            throw makeError(
-              "let_assert",
-              "game_engine",
-              408,
-              "",
-              "Pattern match failed, no pattern matched the value.",
-              { value: $ }
-            );
-          }
-          let piece = $[0];
-          let _block;
-          let _pipe = valid_coords_for_piece(
-            board2,
-            remaining_moves,
-            [source_square.x, source_square.y],
-            piece
-          );
-          _block = map(
-            _pipe,
-            (tuple) => {
-              let valid_coord = tuple[0];
-              return valid_coord;
-            }
-          );
-          let valid_coords = _block;
-          return guard(
-            !contains(valid_coords, [target_square.x, target_square.y]),
-            new Error("Not a valid square square"),
-            () => {
-              return new Ok(void 0);
-            }
-          );
-        }
-      );
-    }
-  );
-}
-function validate_move(board2, remaining_moves, piece, source_square, target_square) {
-  let $ = is_movement_legal(
-    board2,
-    remaining_moves,
-    source_square,
-    target_square
-  );
-  let $1 = is_piece_frozen(board2, piece, source_square);
-  let $2 = is_rabbit_moving_backwards(piece, source_square, target_square);
-  if ($.isOk() && !$1 && !$2) {
-    return new Ok(void 0);
-  } else if (!$.isOk()) {
-    let reason = $[0];
-    return new Error(reason);
-  } else if ($1) {
-    return new Error("Piece is frozen");
-  } else {
-    return new Error("Rabbits cannot move backwards");
-  }
-}
-function is_path_valid(board2, path, actual_square) {
-  let $ = fold(
-    path,
-    [true, board2, actual_square],
-    (acc, target_coords) => {
-      let state2 = acc[0];
-      let board$1 = acc[1];
-      let actual_square$1 = acc[2];
-      return guard(
-        !state2,
-        [false, board$1, actual_square$1],
-        () => {
-          let $1 = actual_square$1.piece;
-          if (!($1 instanceof Some)) {
-            throw makeError(
-              "let_assert",
-              "game_engine",
-              1200,
-              "",
-              "Pattern match failed, no pattern matched the value.",
-              { value: $1 }
-            );
-          }
-          let piece = $1[0];
-          let intermediate_board = update_board(
-            board$1,
-            toList([
-              new Square(actual_square$1.x, actual_square$1.y, new None()),
-              new Square(target_coords[0], target_coords[1], new Some(piece))
-            ])
-          );
-          let target_square = retrieve_square(intermediate_board, target_coords);
-          let $2 = is_piece_captured(intermediate_board, target_square) || is_piece_frozen(
-            intermediate_board,
-            piece,
-            target_square
-          );
-          if ($2) {
-            return [false, intermediate_board, actual_square$1];
-          } else {
-            return [true, intermediate_board, target_square];
-          }
-        }
-      );
-    }
-  );
-  let state = $[0];
-  return state;
+  let is_valid = $[0];
+  return is_valid;
 }
 function remove_invalid_paths(paths, start_square, board2) {
   return filter(
@@ -3995,6 +3906,131 @@ function generate_move_history_records(board2, source_square, target_square) {
     }
   );
   return reverse(_pipe);
+}
+function valid_coords_for_piece(board2, remaining_moves, source_coords, piece) {
+  let source_square = retrieve_square(board2, source_coords);
+  let x1 = source_coords[0];
+  let y1 = source_coords[1];
+  let all_possible_coords = possible_moves(
+    source_square,
+    remaining_moves,
+    new$2(),
+    board2,
+    piece
+  );
+  let _pipe = all_possible_coords;
+  return filter_map(
+    _pipe,
+    (target_coords) => {
+      let x2 = target_coords[0];
+      let y2 = target_coords[1];
+      let is_diagonal = absolute_value(x1 - x2) === absolute_value(
+        y1 - y2
+      );
+      let _block;
+      if (is_diagonal) {
+        _block = diagonal_paths(x1, y1, x2, y2);
+      } else {
+        let $2 = x1 === x2 || y1 === y2;
+        if ($2) {
+          _block = toList([ortogonal_path(x1, x2, y1, y2)]);
+        } else {
+          _block = multi_axis_paths(x1, y1, x2, y2);
+        }
+      }
+      let paths = _block;
+      let valid_paths = remove_invalid_paths(paths, source_square, board2);
+      let $ = is_empty(valid_paths);
+      if ($) {
+        return new Error(void 0);
+      } else {
+        let simulated_board = update_board(
+          board2,
+          toList([
+            new Square(source_square.x, source_square.y, new None()),
+            new Square(target_coords[0], target_coords[1], new Some(piece))
+          ])
+        );
+        let $1 = is_piece_captured(
+          simulated_board,
+          retrieve_square(simulated_board, target_coords)
+        );
+        if ($1) {
+          return new Ok([target_coords, new Danger()]);
+        } else {
+          return new Ok([target_coords, new GoodToGo()]);
+        }
+      }
+    }
+  );
+}
+function is_movement_legal(board2, remaining_moves, source_square, target_square) {
+  return guard(
+    isEqual(source_square.piece, new None()),
+    new Error("Not a piece in the source square"),
+    () => {
+      return guard(
+        !isEqual(target_square.piece, new None()),
+        new Error("Already a piece in the target square"),
+        () => {
+          let $ = source_square.piece;
+          if (!($ instanceof Some)) {
+            throw makeError(
+              "let_assert",
+              "game_engine",
+              408,
+              "",
+              "Pattern match failed, no pattern matched the value.",
+              { value: $ }
+            );
+          }
+          let piece = $[0];
+          let _block;
+          let _pipe = valid_coords_for_piece(
+            board2,
+            remaining_moves,
+            [source_square.x, source_square.y],
+            piece
+          );
+          _block = map(
+            _pipe,
+            (tuple) => {
+              let valid_coord = tuple[0];
+              return valid_coord;
+            }
+          );
+          let valid_coords = _block;
+          return guard(
+            !contains(valid_coords, [target_square.x, target_square.y]),
+            new Error("Not a valid square square"),
+            () => {
+              return new Ok(void 0);
+            }
+          );
+        }
+      );
+    }
+  );
+}
+function validate_move(board2, remaining_moves, piece, source_square, target_square) {
+  let $ = is_movement_legal(
+    board2,
+    remaining_moves,
+    source_square,
+    target_square
+  );
+  let $1 = is_piece_frozen(board2, piece, source_square);
+  let $2 = is_rabbit_moving_backwards(piece, source_square, target_square);
+  if ($.isOk() && !$1 && !$2) {
+    return new Ok(void 0);
+  } else if (!$.isOk()) {
+    let reason = $[0];
+    return new Error(reason);
+  } else if ($1) {
+    return new Error("Piece is frozen");
+  } else {
+    return new Error("Rabbits cannot move backwards");
+  }
 }
 function move_piece(game, piece, target_coords) {
   let source_square = retrieve_square_from_piece(game.board, piece);
