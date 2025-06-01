@@ -12,7 +12,7 @@ import events.{
 }
 import game_engine
 import model
-import ui/piece.{render as render_piece}
+import ui/piece.{render as render_piece, render_ghost as render_ghost_piece}
 
 pub fn render(model: model.Model, positioning: Bool) {
   case positioning {
@@ -39,7 +39,7 @@ fn render_positioning_board(model: model.Model) {
               event.on_mouse_down(Opting(piece)),
               on_dragstart(Nothing),
             ],
-            [render_piece(piece, "", False)],
+            [render_piece(piece, "")],
           )
         },
       ),
@@ -58,7 +58,7 @@ fn render_positioning_board(model: model.Model) {
               event.on_mouse_down(Opting(piece)),
               on_dragstart(Nothing),
             ],
-            [render_piece(piece, "", False)],
+            [render_piece(piece, "")],
           )
         },
       ),
@@ -93,6 +93,7 @@ fn render_board(model: model.Model) {
         ..list.map(model.game.board, fn(square) {
           render_square(
             square: square,
+            board: model.game.board,
             current_player_color: model.game.current_player_color,
             positioning: model.game.positioning,
             opting_square: model.opting_square,
@@ -108,6 +109,7 @@ fn render_board(model: model.Model) {
         list.map(model.game.board, fn(square) {
           render_square(
             square: square,
+            board: model.game.board,
             current_player_color: model.game.current_player_color,
             positioning: model.game.positioning,
             opting_square: model.opting_square,
@@ -124,6 +126,7 @@ fn render_board(model: model.Model) {
 
 fn render_square(
   square square: game_engine.Square,
+  board board: game_engine.Board,
   current_player_color current_player_color: game_engine.PieceColor,
   positioning positioning: Bool,
   opting_square opting_square: Option(game_engine.Square),
@@ -146,16 +149,39 @@ fn render_square(
   }
 
   let is_ghost = opting_square == Some(square)
-  let piece_element = case square.piece, opting_piece, is_ghost {
-    Some(piece), _, False -> [
-      render_piece(piece, piece_additional_classes, is_ghost),
-    ]
+  let piece_element = case square.piece, is_ghost {
+    Some(piece), False -> [render_piece(piece, piece_additional_classes)]
 
-    None, Some(opt_piece), True -> [
-      render_piece(opt_piece, piece_additional_classes, is_ghost),
-    ]
+    None, True -> {
+      // determine what piece render as a ghost
+      // this is done because during repositions
+      // we want to render the piece it moves first as a ghost,
+      // that is, the weak piece during push and the strong piece during pulls
+      // to determine if a reposition is a pull or a push, we check if the opting square
+      // is adjacent to the strong piece, in that case is a pull, otherwise, is a push 
+      let ghost_piece = case opting_piece, enemy_opting_piece, opting_square {
+        Some(p), None, _ -> Some(p)
+        Some(p1), Some(p2), Some(game_engine.Square(x: x, y: y, piece: None)) -> {
+          let p1_square = game_engine.retrieve_square_from_piece(board, p1)
 
-    _, _, _ -> []
+          let p1_adjacent_coords =
+            game_engine.adjacent_coords(#(p1_square.x, p1_square.y))
+
+          case list.contains(p1_adjacent_coords, #(x, y)) {
+            True -> Some(p1)
+            False -> Some(p2)
+          }
+        }
+        _, _, _ -> None
+      }
+
+      case ghost_piece {
+        Some(gp) -> [render_ghost_piece(gp)]
+        None -> []
+      }
+    }
+
+    _, _ -> []
   }
 
   let piece_events = case positioning {

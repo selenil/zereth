@@ -77,10 +77,11 @@ pub fn process_msg(model: model.Model, msg: Msg) {
     }
 
     Opting(piece) -> {
-      // deselect if the user touches the same piece twice
-      let opting_piece = case model.opting_piece {
-        Some(p) if p == piece -> None
-        _ -> Some(piece)
+      // deselect the opting piece if the user touches the same piece twice
+      // deselect the enemy piece whenever the user is opting for one of their pieces
+      let #(opting_piece, enemy_opting_piece) = case model.opting_piece {
+        Some(p) if p == piece -> #(None, None)
+        _ -> #(Some(piece), None)
       }
 
       // we cannot opt for a piece that is frozen
@@ -111,7 +112,13 @@ pub fn process_msg(model: model.Model, msg: Msg) {
         _ -> None
       }
 
-      model.Model(..model, opting_piece:, valid_coords:, error: None)
+      model.Model(
+        ..model,
+        opting_piece:,
+        enemy_opting_piece:,
+        valid_coords:,
+        error: None,
+      )
     }
 
     EnemyOpting(piece) -> {
@@ -121,7 +128,18 @@ pub fn process_msg(model: model.Model, msg: Msg) {
         _ -> Some(piece)
       }
 
-      model.Model(..model, enemy_opting_piece:, error: None)
+      let valid_coords = case model.opting_piece {
+        Some(strong_piece) ->
+          Some(game_engine.valid_coords_for_reposition_piece(
+            model.game.board,
+            strong_piece,
+            piece,
+          ))
+
+        _ -> None
+      }
+
+      model.Model(..model, enemy_opting_piece:, valid_coords:, error: None)
     }
 
     SquareOpting(square) -> {

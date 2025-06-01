@@ -1144,6 +1144,71 @@ pub fn valid_coords_for_piece(
   })
 }
 
+/// Returns a list of valid coordinates that a given piece can reposition another piece from their coordinates.
+///
+/// Valid coordinates does not include two movements per reposition. Instead, the list contains one coordinate for each valid reposition. The coordinates indicates where would move the piece that moves first in that reposition. During push, the piece that moves first is the weak piece, so the coordinate indicates where the weak piece would move in that reposition. During push, the piece that moves first is the strong piece, so the coordinate indicates where the strong piece would move in that reposition.
+/// 
+/// It is up to the caller to determine if each valid coord is a push or a pull. This can be done by checking if the valid coord if an adjacent coord to the weak piece position. If it is, then is a push, otherwise is a pull.
+/// ## Parameters
+///
+/// - `board`: The current game board state
+/// - `strong_piece`: The piece attempting to reposition the weaker piece.
+/// - `weak_piece`: The piece to be repositioned.
+pub fn valid_coords_for_reposition_piece(
+  board: Board,
+  strong_piece: Piece,
+  weak_piece: Piece,
+) -> List(#(Coords, ValidCoordsKind)) {
+  let weak_piece_square = retrieve_square_from_piece(board, weak_piece)
+  let strong_piece_square = retrieve_square_from_piece(board, strong_piece)
+
+  // check if the strong piece would be captured if it moves 
+  // to the weak piece square (push)
+  let is_captured_during_push =
+    is_piece_captured(
+      update_board(board, [
+        Square(
+          x: weak_piece_square.x,
+          y: weak_piece_square.y,
+          piece: Some(strong_piece),
+        ),
+      ]),
+      weak_piece_square,
+    )
+
+  let valid_coords_for_push =
+    possible_moves(weak_piece_square, 1, set.new(), board, weak_piece)
+    |> list.map(fn(coord) {
+      let kind = case is_captured_during_push {
+        True -> Danger
+        False -> GoodToGo
+      }
+
+      #(coord, kind)
+    })
+
+  let valid_coords_for_pull =
+    possible_moves(strong_piece_square, 1, set.new(), board, strong_piece)
+    |> list.map(fn(coord) {
+      let square = retrieve_square(board, coord)
+      let kind = case
+        is_piece_captured(
+          update_board(board, [
+            Square(x: coord.0, y: coord.1, piece: Some(strong_piece)),
+          ]),
+          square,
+        )
+      {
+        True -> Danger
+        False -> GoodToGo
+      }
+
+      #(coord, kind)
+    })
+
+  list.append(valid_coords_for_push, valid_coords_for_pull)
+}
+
 fn possible_moves(
   start: Square,
   remaining_moves: Int,
