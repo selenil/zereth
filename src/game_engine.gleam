@@ -1190,6 +1190,11 @@ fn remove_invalid_paths(
 }
 
 fn is_path_valid(board: Board, path: List(Coords), actual_square: Square) {
+  // we take all the path minus the last step
+  // to check if the path is valid we only need intermediate steps, 
+  // not the final step
+  let path = list.take(path, list.length(path) - 1)
+
   let #(is_valid, _, _) = {
     use acc, target_coords <- list.fold(path, #(True, board, actual_square))
     let #(state, current_board, current_square) = acc
