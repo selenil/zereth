@@ -26,10 +26,20 @@ pub fn view(model: model.Model) -> element.Element(Msg) {
 
   html.div([attribute.class("game-container")], [
     game_status_view,
-    board_view,
+    html.div([attribute.class("main-content")], [
+      board_view,
+      case model.debug_mode {
+        True -> ui.debug_panel(model)
+        False -> html.text("")
+      },
+    ]),
     case model.game.positioning {
       True -> html.text("")
       False -> ui.player_controls(model, events.Undo, events.PassTurn)
+    },
+    case model.debug_mode {
+      True -> ui.debug_tooltip(model)
+      False -> html.text("")
     },
   ])
 }

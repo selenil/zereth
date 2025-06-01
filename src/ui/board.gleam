@@ -8,7 +8,7 @@ import lustre/event
 
 import events.{
   EnemyOpting, MovePiece, Nothing, Opting, PlacePiece, RepositionPiece,
-  SquareOpting,
+  SquareHover, SquareOpting, SquareUnhover,
 }
 import game_engine
 import model
@@ -99,6 +99,8 @@ fn render_board(model: model.Model) {
             opting_piece: model.opting_piece,
             enemy_opting_piece: model.enemy_opting_piece,
             valid_coords: model.valid_coords,
+            debug_mode: model.debug_mode,
+            debug_opting_piece: model.debug_opting_piece,
           )
         })
       ]
@@ -112,6 +114,8 @@ fn render_board(model: model.Model) {
             opting_piece: model.opting_piece,
             enemy_opting_piece: model.enemy_opting_piece,
             valid_coords: model.valid_coords,
+            debug_mode: model.debug_mode,
+            debug_opting_piece: model.debug_opting_piece,
           )
         })
     },
@@ -124,10 +128,12 @@ fn render_square(
   positioning positioning: Bool,
   opting_square opting_square: Option(game_engine.Square),
   opting_piece opting_piece: Option(game_engine.Piece),
+  debug_opting_piece debug_opting_piece: Option(game_engine.Piece),
   enemy_opting_piece enemy_opting_piece: Option(game_engine.Piece),
   valid_coords valid_coords: Option(
     List(#(game_engine.Coords, game_engine.ValidCoordsKind)),
   ),
+  debug_mode debug_mode: Bool,
 ) {
   let piece_additional_classes = case
     square.piece,
@@ -182,13 +188,26 @@ fn render_square(
     None -> attribute.none()
   }
 
-  let interaction_message = case positioning {
+  let interaction_message = case
+    positioning || { debug_mode && debug_opting_piece != None }
+  {
     True -> PlacePiece(square)
     False ->
       case opting_piece, enemy_opting_piece {
         Some(_), Some(_) -> RepositionPiece(square)
         _, _ -> MovePiece(square)
       }
+  }
+
+  let debug_events = case debug_mode {
+    True -> [
+      {
+        use evt <- event.on("mouseenter")
+        Ok(SquareHover(square, evt))
+      },
+      event.on_mouse_leave(SquareUnhover),
+    ]
+    False -> []
   }
 
   html.div(
@@ -204,7 +223,7 @@ fn render_square(
       event.on_click(interaction_message),
       on_dragover(SquareOpting(square)),
       on_drop(interaction_message),
-      ..piece_events
+      ..list.append(piece_events, debug_events)
     ],
     piece_element,
   )

@@ -1,7 +1,9 @@
 import gleam/bool
+import gleam/dynamic.{type Dynamic}
 import gleam/list
 import gleam/option.{type Option, None, Some}
 
+import debug
 import game_engine
 import logger
 import model
@@ -16,12 +18,63 @@ pub type Msg {
   Undo
   PassTurn
   Nothing
+  // Debug events
+  SquareHover(square: game_engine.Square, mouse_event: Dynamic)
+  SquareUnhover
+  DebugPlacementOpting(piece: game_engine.Piece)
+  DebugPlacePiece(coords: game_engine.Coords)
+  DebugClearBoard
+  DebugResetBoard
 }
 
 pub fn process_msg(model: model.Model, msg: Msg) {
   case msg {
     Undo -> set_game(model, game_engine.undo_last_move(model.game))
     PassTurn -> model.Model(..model, game: game_engine.pass_turn(model.game))
+
+    // Debug events
+    SquareHover(square, mouse_event) -> {
+      let mouse_position = debug.get_mouse_position(mouse_event)
+      model.Model(
+        ..model,
+        debug_hovered_square: Some(square),
+        debug_mouse_position: Some(mouse_position),
+      )
+    }
+
+    SquareUnhover -> {
+      model.Model(
+        ..model,
+        debug_hovered_square: None,
+        debug_mouse_position: None,
+      )
+    }
+
+    DebugPlacePiece(coords) -> {
+      let target_square = game_engine.retrieve_square(model.game.board, coords)
+      case model.opting_piece {
+        Some(piece) -> {
+          let updated_game =
+            game_engine.execute_placement(
+              model.game,
+              None,
+              piece,
+              target_square,
+            )
+          set_game(model, updated_game)
+        }
+        None -> model
+      }
+    }
+
+    DebugClearBoard -> {
+      let empty_game = game_engine.new_game()
+      set_game(model, game_engine.Game(..model.game, board: empty_game.board))
+    }
+
+    DebugResetBoard -> {
+      set_game(model, game_engine.new_debug_game())
+    }
 
     Opting(piece) -> {
       // deselect if the user touches the same piece twice
@@ -33,6 +86,7 @@ pub fn process_msg(model: model.Model, msg: Msg) {
       // we cannot opt for a piece that is frozen
       use <- bool.guard(
         !model.game.positioning
+          && !model.debug_mode
           && game_engine.is_piece_frozen(
           model.game.board,
           piece,
@@ -41,8 +95,8 @@ pub fn process_msg(model: model.Model, msg: Msg) {
         model,
       )
 
-      let valid_coords = case opting_piece, model.game.positioning {
-        Some(p), False -> {
+      let valid_coords = case opting_piece {
+        Some(p) if !model.game.positioning -> {
           let source_square =
             game_engine.retrieve_square_from_piece(model.game.board, p)
 
@@ -53,7 +107,8 @@ pub fn process_msg(model: model.Model, msg: Msg) {
             p,
           ))
         }
-        _, _ -> None
+
+        _ -> None
       }
 
       model.Model(..model, opting_piece:, valid_coords:, error: None)
@@ -106,7 +161,33 @@ pub fn process_msg(model: model.Model, msg: Msg) {
       }
     }
 
+    DebugPlacementOpting(piece) -> {
+      // deselect if the user touches the same piece twice
+      let debug_opting_piece = case model.debug_opting_piece {
+        Some(p) if p == piece -> None
+        _ -> Some(piece)
+      }
+
+      model.Model(..model, debug_opting_piece:)
+    }
+
     PlacePiece(target_square) -> {
+      use <- bool.guard(model.debug_mode, {
+        case model.debug_opting_piece {
+          Some(piece) -> {
+            let updated_game =
+              game_engine.execute_placement(
+                model.game,
+                None,
+                piece,
+                target_square,
+              )
+            set_game(model, updated_game)
+          }
+          _ -> model
+        }
+      })
+
       case model.opting_piece {
         Some(piece) if piece.color == model.game.current_player_color -> {
           case
@@ -134,13 +215,14 @@ pub fn process_msg(model: model.Model, msg: Msg) {
       }
     }
 
-    MovePiece(target_square) ->
+    MovePiece(target_square) -> {
       case model.opting_piece {
         Some(piece) if target_square.piece != Some(piece) ->
           move_piece(model, piece, #(target_square.x, target_square.y))
 
         _ -> model
       }
+    }
 
     RepositionPiece(target_square) ->
       case model.opting_piece, model.enemy_opting_piece {
@@ -164,6 +246,17 @@ fn place_piece(
   piece: game_engine.Piece,
   source_coords: Option(game_engine.Coords),
 ) -> model.Model {
+  use <- bool.guard(model.debug_mode, {
+    let game =
+      game_engine.execute_placement(
+        model.game,
+        source_coords,
+        piece,
+        game_engine.retrieve_square(model.game.board, target_coords),
+      )
+    set_game(model, game)
+  })
+
   case
     game_engine.place_piece(model.game, target_coords, piece, source_coords)
   {
@@ -217,24 +310,32 @@ fn reposition_piece(
   }
 }
 
-fn set_game(_model: model.Model, game: game_engine.Game) -> model.Model {
+fn set_game(model: model.Model, game: game_engine.Game) -> model.Model {
   model.Model(
-    game:,
+    game: game,
     opting_piece: None,
     enemy_opting_piece: None,
     valid_coords: None,
     error: None,
     opting_square: None,
+    debug_mode: model.debug_mode,
+    debug_opting_piece: None,
+    debug_hovered_square: None,
+    debug_mouse_position: None,
   )
 }
 
 fn set_error(model: model.Model, error: String) -> model.Model {
   model.Model(
-    ..model,
+    game: model.game,
     error: Some(error),
     opting_piece: None,
     enemy_opting_piece: None,
     valid_coords: None,
     opting_square: None,
+    debug_mode: model.debug_mode,
+    debug_opting_piece: None,
+    debug_hovered_square: None,
+    debug_mouse_position: None,
   )
 }

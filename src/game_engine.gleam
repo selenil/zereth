@@ -1400,6 +1400,13 @@ pub fn multi_axis_paths(x1: Int, y1: Int, x2: Int, y2: Int) {
   })
 }
 
+pub fn piece_strength(kind: PieceKind) -> Int {
+  let assert Ok(#(_, strength)) =
+    list.find(pieces_strength, fn(tuple) { tuple.0 == kind })
+
+  strength
+}
+
 /// Converts a piece color to its string representation
 pub fn piece_color_to_string(piece_color: PieceColor) {
   case piece_color {

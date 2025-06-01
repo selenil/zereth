@@ -26,3 +26,22 @@ export function hideDragImage(event) {
 
   event.target.addEventListener("dragend", cleanup);
 }
+
+/**
+ * Checks if debug mode is enabled via URL parameters
+ * Returns true if ?debug=true is present in the URL
+ */
+export function isDebugMode() {
+  const urlParams = new URLSearchParams(window.location.search);
+  return urlParams.get("debug") === "true";
+}
+
+/**
+ * Gets the current mouse position relative to an element
+ */
+export function getMousePosition(event) {
+  return {
+    x: event.clientX,
+    y: event.clientY,
+  };
+}

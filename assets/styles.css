@@ -310,3 +310,224 @@ body {
     opacity: 1;
   }
 }
+
+/* Debug Mode Styles */
+.debug-header {
+  background: linear-gradient(135deg, #2c3e50, #34495e);
+  padding: 15px 20px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  border: 2px solid #e74c3c;
+  box-shadow: 0 4px 8px rgba(231, 76, 60, 0.3);
+}
+
+.debug-title {
+  color: #e74c3c;
+  margin: 0;
+  font-size: 1.8rem;
+  font-weight: 600;
+  text-align: center;
+}
+
+.debug-subtitle {
+  color: #ecf0f1;
+  margin: 5px 0 0 0;
+  font-size: 1rem;
+  text-align: center;
+  opacity: 0.9;
+}
+
+.main-content {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+}
+
+.debug-panel {
+  background: rgba(44, 62, 80, 0.95);
+  border: 2px solid #e74c3c;
+  border-radius: 8px;
+  padding: 20px;
+  min-width: 300px;
+  max-width: 350px;
+  color: #ecf0f1;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.debug-panel h3 {
+  color: #e74c3c;
+  margin: 0 0 15px 0;
+  font-size: 1.4rem;
+  border-bottom: 2px solid #e74c3c;
+  padding-bottom: 8px;
+}
+
+.debug-section {
+  margin-bottom: 20px;
+}
+
+.debug-section h4 {
+  color: #3498db;
+  margin: 0 0 10px 0;
+  font-size: 1.1rem;
+}
+
+.debug-button {
+  background: #e74c3c;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  margin: 0 5px 5px 0;
+  font-size: 0.9rem;
+  transition: all 0.2s ease;
+}
+
+.debug-button:hover {
+  background: #c0392b;
+  transform: translateY(-1px);
+}
+
+.debug-button:active {
+  transform: translateY(0);
+}
+
+.debug-info {
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+.debug-info div {
+  margin-bottom: 5px;
+}
+
+.debug-info strong {
+  color: #3498db;
+}
+
+/* Debug Tooltip */
+.debug-tooltip {
+  background: rgba(0, 0, 0, 0.95);
+  color: white;
+  padding: 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.4;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  border: 1px solid #e74c3c;
+  max-width: 250px;
+}
+
+.tooltip-line {
+  margin-bottom: 4px;
+}
+
+.tooltip-line:last-child {
+  margin-bottom: 0;
+}
+
+.tooltip-line strong {
+  color: #3498db;
+}
+
+.trap-info {
+  color: #f39c12;
+  font-weight: bold;
+}
+
+/* Piece Palette */
+.piece-palette {
+  background: rgba(52, 73, 94, 0.8);
+  border-radius: 6px;
+  padding: 10px;
+  margin-top: 10px;
+}
+
+.palette-note {
+  font-size: 0.8rem;
+  color: #bdc3c7;
+  margin-bottom: 10px;
+  font-style: italic;
+}
+
+.palette-color-label {
+  color: #e74c3c;
+  font-weight: bold;
+  font-size: 0.9rem;
+  margin: 10px 0 5px 0;
+}
+
+.palette-row {
+  display: flex;
+  gap: 5px;
+  margin-bottom: 8px;
+}
+
+.palette-piece {
+  background: rgba(236, 240, 241, 0.1);
+  border: 1px solid #7f8c8d;
+  border-radius: 4px;
+  padding: 4px 6px;
+  cursor: pointer;
+  font-size: 16px;
+  transition: all 0.2s ease;
+  min-width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.palette-piece:hover {
+  background: rgba(52, 152, 219, 0.3);
+  border-color: #3498db;
+  transform: scale(1.1);
+}
+
+.palette-piece:active {
+  transform: scale(0.95);
+}
+
+/* Move History */
+.move-history {
+  max-height: 200px;
+  overflow-y: auto;
+  background: rgba(52, 73, 94, 0.6);
+  border-radius: 4px;
+  padding: 8px;
+}
+
+.history-move {
+  font-size: 0.8rem;
+  padding: 3px 6px;
+  margin-bottom: 2px;
+  background: rgba(236, 240, 241, 0.1);
+  border-radius: 3px;
+  border-left: 3px solid #3498db;
+}
+
+.history-empty {
+  font-size: 0.8rem;
+  color: #7f8c8d;
+  font-style: italic;
+  text-align: center;
+  padding: 10px;
+}
+
+/* Debug mode board adjustments */
+.game-container .main-content .board {
+  flex-shrink: 0;
+}
+
+/* Responsive adjustments for debug mode */
+@media (max-width: 1200px) {
+  .main-content {
+    flex-direction: column;
+  }
+  
+  .debug-panel {
+    max-width: none;
+    width: 100%;
+  }
+}
