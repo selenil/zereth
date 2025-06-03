@@ -27,7 +27,6 @@ pub type Model {
 pub fn init(_flags) -> Model {
   let debug_mode = debug.is_debug_mode()
   let loaded_presets = load_presets()
-  echo loaded_presets
 
   Model(
     game: case debug_mode {
@@ -53,8 +52,8 @@ fn load_presets() -> List(presets.Preset) {
   presets.preset_names
   |> list.filter_map(fn(name) {
     case load_preset(name) {
-      Ok(preset) -> echo Ok(preset)
-      Error(_) -> echo Error(Nil)
+      Ok(preset) -> Ok(preset)
+      Error(_) -> Error(Nil)
     }
   })
 }
