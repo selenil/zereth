@@ -7,6 +7,7 @@ import debug
 import game_engine
 import logger
 import model
+import presets
 
 pub type Msg {
   Opting(piece: game_engine.Piece)
@@ -25,6 +26,10 @@ pub type Msg {
   DebugPlacePiece(coords: game_engine.Coords)
   DebugClearBoard
   DebugResetBoard
+  // Preset events
+  ApplyPreset(preset: presets.Preset)
+  PresetHover(preset: presets.Preset)
+  PresetUnhover
 }
 
 pub fn process_msg(model: model.Model, msg: Msg) {
@@ -74,6 +79,30 @@ pub fn process_msg(model: model.Model, msg: Msg) {
 
     DebugResetBoard -> {
       set_game(model, game_engine.new_debug_game())
+    }
+
+    // Preset events
+    ApplyPreset(preset) -> {
+      case model.game.positioning {
+        True -> {
+          let updated_game =
+            presets.apply_preset_to_game(
+              model.game,
+              preset,
+              model.game.current_player_color,
+            )
+          set_game(model, updated_game)
+        }
+        False -> model
+      }
+    }
+
+    PresetHover(preset) -> {
+      model.Model(..model, hovered_preset: Some(preset))
+    }
+
+    PresetUnhover -> {
+      model.Model(..model, hovered_preset: None)
     }
 
     Opting(piece) -> {
@@ -340,6 +369,8 @@ fn set_game(model: model.Model, game: game_engine.Game) -> model.Model {
     debug_opting_piece: None,
     debug_hovered_square: None,
     debug_mouse_position: None,
+    presets: model.presets,
+    hovered_preset: None,
   )
 }
 
@@ -355,5 +386,7 @@ fn set_error(model: model.Model, error: String) -> model.Model {
     debug_opting_piece: None,
     debug_hovered_square: None,
     debug_mouse_position: None,
+    presets: model.presets,
+    hovered_preset: None,
   )
 }

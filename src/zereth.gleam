@@ -27,7 +27,14 @@ pub fn view(model: model.Model) -> element.Element(Msg) {
   html.div([attribute.class("game-container")], [
     game_status_view,
     html.div([attribute.class("main-content")], [
-      board_view,
+      case model.game.positioning {
+        True ->
+          html.div([attribute.class("positioning-layout")], [
+            ui.preset_buttons(model),
+            board_view,
+          ])
+        False -> board_view
+      },
       case model.debug_mode {
         True -> ui.debug_panel(model)
         False -> html.text("")
@@ -41,6 +48,7 @@ pub fn view(model: model.Model) -> element.Element(Msg) {
       True -> ui.debug_tooltip(model)
       False -> html.text("")
     },
+    ui.preset_tooltip(model),
   ])
 }
 
