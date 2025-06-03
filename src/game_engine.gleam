@@ -1462,6 +1462,7 @@ pub fn multi_axis_paths(x1: Int, y1: Int, x2: Int, y2: Int) {
   })
 }
 
+/// Returns the strength of a piece
 pub fn piece_strength(kind: PieceKind) -> Int {
   let assert Ok(#(_, strength)) =
     list.find(pieces_strength, fn(tuple) { tuple.0 == kind })

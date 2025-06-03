@@ -852,13 +852,18 @@ pub fn place_piece_invalid_territory_test() {
 }
 
 pub fn place_piece_occupied_square_test() {
-  let game = setup_test_game([#(Piece(Elephant, Gold, 1), #(1, 1))])
-  let piece = Piece(Camel, Gold, 1)
+  let elephant = Piece(Elephant, Gold, 1)
+  let camel = Piece(Camel, Gold, 1)
+  let game = setup_test_game([#(elephant, #(1, 1)), #(camel, #(2, 1))])
   let target_coords = #(1, 1)
 
-  let result = game_engine.place_piece(game, target_coords, piece, None)
+  let assert Ok(updated_game) =
+    game_engine.place_piece(game, target_coords, camel, Some(#(2, 1)))
+  let source_square = game_engine.retrieve_square(updated_game.board, #(2, 1))
+  should.equal(source_square.piece, Some(elephant))
 
-  should.be_error(result)
+  let target_square = game_engine.retrieve_square(updated_game.board, #(1, 1))
+  should.equal(target_square.piece, Some(camel))
 }
 
 pub fn place_piece_wrong_territory_test() {
@@ -963,6 +968,26 @@ pub fn no_win_normal_game_state_test() {
 
   let win_game = game_engine.check_win(game)
   should.be_false(win_game.win)
+}
+
+pub fn piece_strength_test() {
+  game_engine.piece_strength(Rabbit)
+  |> should.equal(1)
+
+  game_engine.piece_strength(Cat)
+  |> should.equal(2)
+
+  game_engine.piece_strength(Dog)
+  |> should.equal(3)
+
+  game_engine.piece_strength(Horse)
+  |> should.equal(4)
+
+  game_engine.piece_strength(Camel)
+  |> should.equal(5)
+
+  game_engine.piece_strength(Elephant)
+  |> should.equal(6)
 }
 
 // String conversion tests
