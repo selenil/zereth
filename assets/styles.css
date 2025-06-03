@@ -412,9 +412,7 @@ body {
 .preset-name {
   color: var(--text-light);
   font-size: 1.1rem;
-  font-weight: 700;
-  margin-bottom: 8px;
-  text-transform: uppercase;
+  font-weight: 600;
   letter-spacing: 0.5px;
 }
 
