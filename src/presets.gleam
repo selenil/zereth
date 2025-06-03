@@ -28,10 +28,10 @@ pub const preset_names: List(String) = ["fritzlein", "MH", "99of9"]
 /// "Preset description"
 /// 
 /// PIECE - (x, y)
-/// 
+/// ... 
 ///
-/// Description always needs to be at the top of the file.
-/// Piece placements uses the [Arimaa notation](https://en.wikibooks.org/wiki/Arimaa/Playing_The_Game#Notation).
+/// Description always needs to be at the top of the file and
+/// piece placements uses the [Arimaa notation](https://en.wikibooks.org/wiki/Arimaa/Playing_The_Game#Notation).
 /// Whitelines are ignored.
 /// Presets are agnostic to the player color, so the coordinates 
 /// are expressed in "1" and "2" terms. We convert them later
