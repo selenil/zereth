@@ -35,7 +35,17 @@ pub type Msg {
 pub fn process_msg(model: model.Model, msg: Msg) {
   case msg {
     Undo -> set_game(model, game_engine.undo_last_move(model.game))
-    PassTurn -> model.Model(..model, game: game_engine.pass_turn(model.game))
+    PassTurn -> {
+      use <- bool.guard(
+        model.game.positioning,
+        model.Model(
+          ..model,
+          game: game_engine.pass_turn_during_positioning(model.game),
+        ),
+      )
+
+      model.Model(..model, game: game_engine.pass_turn(model.game))
+    }
 
     // Debug events
     SquareHover(square, mouse_event) -> {
@@ -109,7 +119,7 @@ pub fn process_msg(model: model.Model, msg: Msg) {
       // deselect the opting piece if the user touches the same piece twice
       // deselect the enemy piece whenever the user is opting for one of their pieces
       let #(opting_piece, enemy_opting_piece) = case model.opting_piece {
-        Some(p) if p == piece -> #(None, None)
+        Some(p) if p == piece && !model.game.positioning -> #(None, None)
         _ -> #(Some(piece), None)
       }
 
@@ -237,26 +247,21 @@ pub fn process_msg(model: model.Model, msg: Msg) {
 
       case model.opting_piece {
         Some(piece) if piece.color == model.game.current_player_color -> {
-          case
+          let source_coords = case
             list.find(model.game.board, fn(square) {
               square.piece == Some(piece)
             })
           {
-            Ok(source_square) ->
-              place_piece(
-                model,
-                #(target_square.x, target_square.y),
-                piece,
-                Some(#(source_square.x, source_square.y)),
-              )
-            Error(_) ->
-              place_piece(
-                model,
-                #(target_square.x, target_square.y),
-                piece,
-                None,
-              )
+            Ok(source_square) -> Some(#(source_square.x, source_square.y))
+            Error(_) -> None
           }
+
+          place_piece(
+            model,
+            #(target_square.x, target_square.y),
+            piece,
+            source_coords,
+          )
         }
         _ -> model
       }

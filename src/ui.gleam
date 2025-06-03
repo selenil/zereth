@@ -6,8 +6,8 @@ import ui/game_status
 import ui/player_controls
 import ui/presets
 
-pub fn board(model: model.Model, positioning: Bool) {
-  board.render(model, positioning)
+pub fn board(model: model.Model) {
+  board.render(model)
 }
 
 pub fn game_status(model: model.Model) {

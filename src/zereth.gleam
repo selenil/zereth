@@ -26,7 +26,7 @@ pub fn update(model: model.Model, msg: Msg) -> model.Model {
 }
 
 pub fn view(model: model.Model) -> element.Element(Msg) {
-  let board_view = ui.board(model, model.game.positioning)
+  let board_view = ui.board(model)
   let game_status_view = ui.game_status(model)
 
   html.div([attribute.class("game-container")], [
@@ -56,7 +56,7 @@ pub fn view(model: model.Model) -> element.Element(Msg) {
           case model.game.positioning {
             True -> {
               html.div([], [
-                render_board_only(model),
+                board_view,
                 ui.player_controls(model, events.Undo, events.PassTurn),
               ])
             }
@@ -106,11 +106,6 @@ fn render_available_pieces(model: model.Model, color: game_engine.PieceColor) {
       )
     }),
   )
-}
-
-// Helper function to render just the board without pieces around it
-fn render_board_only(model: model.Model) {
-  ui.board(model, False)
 }
 
 fn on_dragstart(msg) {

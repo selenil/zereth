@@ -7,68 +7,14 @@ import lustre/element/html
 import lustre/event
 
 import events.{
-  EnemyOpting, MovePiece, Nothing, Opting, PlacePiece, RepositionPiece,
-  SquareHover, SquareOpting, SquareUnhover,
+  EnemyOpting, MovePiece, Opting, PlacePiece, RepositionPiece, SquareHover,
+  SquareOpting, SquareUnhover,
 }
 import game_engine
 import model
 import ui/piece.{render as render_piece, render_ghost as render_ghost_piece}
 
-pub fn render(model: model.Model, positioning: Bool) {
-  case positioning {
-    True -> render_positioning_board(model)
-    False -> render_play_board(model)
-  }
-}
-
-/// Renders the board in positioning phase
-pub fn render_positioning_board(model: model.Model) {
-  let available_pieces =
-    game_engine.get_aviable_pieces_to_place(model.game.board)
-
-  html.div([], [
-    html.div(
-      [attribute.class("available-pieces silver")],
-      list.map(
-        list.filter(available_pieces, fn(piece) {
-          piece.color == game_engine.Silver
-        }),
-        fn(piece) {
-          html.div(
-            [
-              event.on_click(Opting(piece)),
-              event.on_mouse_down(Opting(piece)),
-              on_dragstart(Nothing),
-            ],
-            [render_piece(piece, "")],
-          )
-        },
-      ),
-    ),
-    render_board(model),
-    html.div(
-      [attribute.class("available-pieces gold")],
-      list.map(
-        list.filter(available_pieces, fn(piece) {
-          piece.color == game_engine.Gold
-        }),
-        fn(piece) {
-          html.div(
-            [
-              event.on_click(Opting(piece)),
-              event.on_mouse_down(Opting(piece)),
-              on_dragstart(Nothing),
-            ],
-            [render_piece(piece, "")],
-          )
-        },
-      ),
-    ),
-  ])
-}
-
-/// Renders the board in play phase
-pub fn render_play_board(model: model.Model) {
+pub fn render(model: model.Model) {
   render_board(model)
 }
 
@@ -190,10 +136,7 @@ fn render_square(
     _, _ -> []
   }
 
-  let piece_events = case positioning {
-    True -> []
-    False -> piece_events(square, current_player_color)
-  }
+  let piece_events = piece_events(square, current_player_color)
 
   let square_id = case square.piece {
     Some(piece) -> build_piece_id(piece)

@@ -196,6 +196,23 @@ pub fn pass_turn(game: Game) -> Game {
   }
 }
 
+/// Passes the turn to the next player in the positioning phase
+///
+/// If both players have positioned their pieces, this function will end the positioning phase
+pub fn pass_turn_during_positioning(game: Game) -> Game {
+  let positioning = is_positioning(game.board)
+  let current_player_color = case positioning {
+    True -> pass_player_color(game)
+    False -> Gold
+  }
+  let remaining_moves = case positioning {
+    True -> 0
+    False -> 4
+  }
+
+  Game(..game, positioning:, current_player_color:, remaining_moves:)
+}
+
 /// Attempts to move the specified `piece` by the given
 /// `target_coords`. In Arimaa, pieces moves one square per time and only
 /// in ortogonal directions. Also, another set of rules determines if a
@@ -708,24 +725,7 @@ pub fn place_piece(
       let updated_game =
         execute_placement(game, source_coords, target_piece, target_square)
 
-      let positioning = is_positioning(updated_game.board)
-      let current_player_color = case positioning {
-        True -> pass_player_color(updated_game)
-        False -> Gold
-      }
-      let remaining_moves = case positioning {
-        True -> 0
-        False -> 4
-      }
-
-      Ok(
-        Game(
-          ..updated_game,
-          positioning:,
-          remaining_moves:,
-          current_player_color:,
-        ),
-      )
+      Ok(updated_game)
     }
   }
 }
@@ -751,9 +751,11 @@ pub fn execute_placement(
     Some(source_coords) -> {
       let source_square = retrieve_square(game.board, source_coords)
 
+      // if there is a piece in the target square
+      // we put in the source square, changing positions with the piece we are about to place
       [
         Square(..target_square, piece: Some(target_piece)),
-        Square(..source_square, piece: None),
+        Square(..source_square, piece: target_square.piece),
       ]
     }
 
@@ -770,11 +772,6 @@ pub fn is_placement_legal(
   piece: Piece,
   target_square: Square,
 ) -> Result(Nil, String) {
-  use <- bool.guard(
-    target_square.piece != None,
-    Error("There is already a piece in the target square"),
-  )
-
   case piece.color {
     Gold -> {
       use <- bool.guard(
