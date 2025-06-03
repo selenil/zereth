@@ -17,11 +17,12 @@ import ui/piece.{render as render_piece, render_ghost as render_ghost_piece}
 pub fn render(model: model.Model, positioning: Bool) {
   case positioning {
     True -> render_positioning_board(model)
-    False -> render_board(model)
+    False -> render_play_board(model)
   }
 }
 
-fn render_positioning_board(model: model.Model) {
+/// Renders the board in positioning phase
+pub fn render_positioning_board(model: model.Model) {
   let available_pieces =
     game_engine.get_aviable_pieces_to_place(model.game.board)
 
@@ -64,6 +65,11 @@ fn render_positioning_board(model: model.Model) {
       ),
     ),
   ])
+}
+
+/// Renders the board in play phase
+pub fn render_play_board(model: model.Model) {
+  render_board(model)
 }
 
 fn render_board(model: model.Model) {

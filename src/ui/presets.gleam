@@ -43,15 +43,10 @@ fn render_preset_button(
       attribute.class(color_class),
       attribute.title(preset.description),
       event.on_click(ApplyPreset(preset)),
-      //event.on_mouse_over(PresetHover(preset)),
-    //event.on_mouse_leave(PresetUnhover),
+      event.on_mouse_over(PresetHover(preset)),
+      event.on_mouse_leave(PresetUnhover),
     ],
-    [
-      html.div([attribute.class("preset-name")], [html.text(preset.name)]),
-      html.div([attribute.class("preset-description")], [
-        html.text(preset.description),
-      ]),
-    ],
+    [html.div([attribute.class("preset-name")], [html.text(preset.name)])],
   )
 }
 
