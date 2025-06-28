@@ -1187,15 +1187,18 @@ pub fn valid_coords_for_reposition_piece(
   let valid_coords_for_pull =
     possible_moves(strong_piece_square, 1, set.new(), board, strong_piece)
     |> list.map(fn(coord) {
-      let square = retrieve_square(board, coord)
-      let kind = case
-        is_piece_captured(
-          update_board(board, [
-            Square(x: coord.0, y: coord.1, piece: Some(strong_piece)),
-          ]),
-          square,
-        )
-      {
+      let check_square =
+        Square(x: coord.0, y: coord.1, piece: Some(strong_piece))
+
+      let movement = [
+        check_square,
+        Square(x: strong_piece_square.x, y: strong_piece_square.y, piece: None),
+      ]
+
+      let is_captured_during_pull =
+        is_piece_captured(update_board(board, movement), check_square)
+
+      let kind = case is_captured_during_pull {
         True -> Danger
         False -> GoodToGo
       }
